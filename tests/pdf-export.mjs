@@ -305,12 +305,21 @@ try {
       }
     })
     await mobilePage.goto(`http://127.0.0.1:5173/?document=${kind}`)
-    await mobilePage.getByLabel('Name').fill('Mobile Client')
-    await mobilePage.getByLabel('Description 1').fill('Mobile layout test')
-    await mobilePage.getByLabel('Amount 1').fill('$500')
+    if (await mobilePage.locator('.editor-panel').isVisible()) {
+      throw new Error(`mobile ${kind}: separate form should be hidden in direct document mode`)
+    }
+    await mobilePage.getByRole('button', { name: 'Form', exact: true }).click()
+    if (!await mobilePage.locator('.editor-panel').isVisible()) {
+      throw new Error(`mobile ${kind}: form fallback did not open`)
+    }
+    await mobilePage.getByRole('button', { name: 'Document', exact: true }).click()
 
-    const mobileTotal = await mobilePage.getByLabel('Total before GST').inputValue()
-    const mobileBalance = await mobilePage.locator('.balance-field strong').textContent()
+    await mobilePage.locator('.document-page [data-pdf-field="customer-name"]').fill('Mobile Client')
+    await mobilePage.locator('.document-page [data-pdf-field="item-1-description"]').fill('Mobile layout test')
+    await mobilePage.locator('.document-page [data-pdf-field="item-1-amount"]').fill('$500')
+
+    const mobileTotal = await mobilePage.locator('.document-page [data-pdf-field="total"]').textContent()
+    const mobileBalance = await mobilePage.locator('.document-page [data-pdf-field="balance"]').textContent()
     if (mobileTotal !== '$500.00' || mobileBalance !== '$500.00') {
       throw new Error(`mobile ${kind}: payment formulas did not update from touch-sized inputs`)
     }
@@ -365,11 +374,11 @@ try {
     if (!mobilePdf.getForm().getFields().length) {
       throw new Error(`mobile ${kind}: downloaded PDF has no editable fields`)
     }
-    if (await mobilePage.getByLabel('Name').inputValue()) {
+    if (await mobilePage.locator('.document-page [data-pdf-field="customer-name"]').textContent()) {
       throw new Error(`mobile ${kind}: form did not clear after download`)
     }
 
-    console.log(`mobile ${kind}: PASS — responsive editor, formulas, download, and reset`)
+    console.log(`mobile ${kind}: PASS — direct editing, form fallback, formulas, download, and reset`)
     await mobileContext.close()
   }
 } finally {

@@ -74,6 +74,8 @@ const nav: Array<{ id: DocumentKind; label: string; icon: typeof ReceiptText }> 
   { id: 'contract', label: 'Contract', icon: FileCheck2 },
 ]
 
+type UpdateDocument = <K extends keyof DocumentData>(key: K, value: DocumentData[K]) => void
+
 function getInitialDocument(): DocumentKind {
   const requested = new URLSearchParams(window.location.search).get('document')
   return requested === 'quotation' || requested === 'contract' ? requested : 'invoice'
@@ -103,10 +105,12 @@ function FittedPdfValue({
   field,
   value,
   readOnly = false,
+  onChange,
 }: {
   field: string
   value: string
   readOnly?: boolean
+  onChange?: (value: string) => void
 }) {
   const valueRef = useRef<HTMLSpanElement>(null)
 
@@ -136,6 +140,49 @@ function FittedPdfValue({
       data-pdf-field={field}
       data-pdf-autofit="true"
       data-pdf-readonly={readOnly ? 'true' : undefined}
+      className={onChange && !readOnly ? 'inline-editable' : undefined}
+      contentEditable={Boolean(onChange) && !readOnly}
+      suppressContentEditableWarning
+      tabIndex={onChange && !readOnly ? 0 : undefined}
+      onInput={(event) => onChange?.(event.currentTarget.innerText)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
+    >
+      {value}
+    </span>
+  )
+}
+
+function PdfTextValue({
+  field,
+  value,
+  onChange,
+  multiline = false,
+}: {
+  field: string
+  value: string
+  onChange: (value: string) => void
+  multiline?: boolean
+}) {
+  return (
+    <span
+      className="inline-editable"
+      data-pdf-field={field}
+      data-multiline={multiline ? 'true' : undefined}
+      contentEditable
+      suppressContentEditableWarning
+      tabIndex={0}
+      onInput={(event) => onChange(event.currentTarget.innerText)}
+      onKeyDown={(event) => {
+        if (!multiline && event.key === 'Enter') {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+      }}
     >
       {value}
     </span>
@@ -146,6 +193,7 @@ function App() {
   const [active, setActive] = useState<DocumentKind>(getInitialDocument)
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
+  const [mobileView, setMobileView] = useState<'document' | 'form'>('document')
   const data = documents[active]
   const supportsPaymentSummary = active !== 'contract'
   const totalWithGst = supportsPaymentSummary ? calculateTotalWithGst(data.total) : ''
@@ -265,6 +313,25 @@ function App() {
           </button>
         </header>
 
+        {active !== 'contract' && (
+          <div className="mobile-view-switch" aria-label="Mobile editing view">
+            <button
+              className={mobileView === 'document' ? 'active' : ''}
+              type="button"
+              onClick={() => setMobileView('document')}
+            >
+              Document
+            </button>
+            <button
+              className={mobileView === 'form' ? 'active' : ''}
+              type="button"
+              onClick={() => setMobileView('form')}
+            >
+              Form
+            </button>
+          </div>
+        )}
+
         {active === 'contract' ? (
           <section className="contract-pending">
             <div className="pending-icon"><FileCheck2 /></div>
@@ -276,7 +343,7 @@ function App() {
             </span>
           </section>
         ) : (
-          <div className="workspace">
+          <div className={`workspace mobile-${mobileView}-view`}>
             <section className="editor-panel">
               <div className="editor-heading">
                 <span>EDITABLE DETAILS</span>
@@ -370,7 +437,14 @@ function App() {
                 <span>PDF PREVIEW</span>
                 <small>A4 portrait</small>
               </div>
-              <DocumentPage kind={active} data={data} />
+              <DocumentPage
+                kind={active}
+                data={data}
+                onUpdate={update}
+                onUpdateCustomer={updateCustomer}
+                onUpdateItem={updateItem}
+                onUpdateTotal={updatePaymentTotal}
+              />
             </section>
           </div>
         )}
@@ -394,22 +468,60 @@ function BusinessHeader() {
   )
 }
 
-function CustomerBox({ kind, data }: { kind: DocumentKind; data: DocumentData }) {
+function CustomerBox({
+  kind,
+  data,
+  onUpdateCustomer,
+}: {
+  kind: DocumentKind
+  data: DocumentData
+  onUpdateCustomer: (key: keyof DocumentData['customer'], value: string) => void
+}) {
   return (
     <div className="doc-box customer-box">
       <div className="box-title">{kind === 'invoice' ? 'Bill To' : 'CUSTOMER'}</div>
       <div className="box-body">
-        <p><b>Name:</b> <span data-pdf-field="customer-name">{data.customer.name}</span></p>
-        {kind === 'invoice' && <p><b>abn:</b> <span data-pdf-field="customer-abn">{data.customer.abn}</span></p>}
-        <p className="preserve"><b>Address:</b> <span data-pdf-field="customer-address" data-multiline="true">{data.customer.address}</span></p>
-        <p><b>{kind === 'invoice' ? 'Phone:' : 'Number'}</b> <span data-pdf-field="customer-phone">{data.customer.phone}</span></p>
-        <p><b>Email{kind === 'invoice' ? ':' : ''}</b> <span data-pdf-field="customer-email">{data.customer.email}</span></p>
+        <p><b>Name:</b> <PdfTextValue field="customer-name" value={data.customer.name} onChange={(value) => onUpdateCustomer('name', value)} /></p>
+        {kind === 'invoice' && (
+          <p><b>abn:</b> <PdfTextValue field="customer-abn" value={data.customer.abn} onChange={(value) => onUpdateCustomer('abn', value)} /></p>
+        )}
+        <p className="preserve">
+          <b>Address:</b>{' '}
+          <PdfTextValue
+            field="customer-address"
+            value={data.customer.address}
+            onChange={(value) => onUpdateCustomer('address', value)}
+            multiline
+          />
+        </p>
+        <p>
+          <b>{kind === 'invoice' ? 'Phone:' : 'Number'}</b>{' '}
+          <PdfTextValue field="customer-phone" value={data.customer.phone} onChange={(value) => onUpdateCustomer('phone', value)} />
+        </p>
+        <p>
+          <b>Email{kind === 'invoice' ? ':' : ''}</b>{' '}
+          <PdfTextValue field="customer-email" value={data.customer.email} onChange={(value) => onUpdateCustomer('email', value)} />
+        </p>
       </div>
     </div>
   )
 }
 
-function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }) {
+function DocumentPage({
+  kind,
+  data,
+  onUpdate,
+  onUpdateCustomer,
+  onUpdateItem,
+  onUpdateTotal,
+}: {
+  kind: DocumentKind
+  data: DocumentData
+  onUpdate: UpdateDocument
+  onUpdateCustomer: (key: keyof DocumentData['customer'], value: string) => void
+  onUpdateItem: (index: number, key: keyof WorkItem, value: string) => void
+  onUpdateTotal: (value: string) => void
+}) {
   const invoice = kind === 'invoice'
   const totalWithGst = calculateTotalWithGst(data.total)
   const balance = calculateBalance(data.total, data.deposit)
@@ -420,14 +532,26 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
         <div className="document-meta">
           <h2>{invoice ? 'Invoice' : 'QUOTATION AND CONTRACT'}</h2>
           <div className="meta-grid">
-            {invoice && <><b>INVOICE #</b><b>DATE</b><span data-pdf-field="number">{data.number}</span><span data-pdf-field="date">{data.date}</span></>}
-            {!invoice && <><b>DATE</b><span data-pdf-field="date">{data.date}</span></>}
+            {invoice && (
+              <>
+                <b>INVOICE #</b>
+                <b>DATE</b>
+                <PdfTextValue field="number" value={data.number} onChange={(value) => onUpdate('number', value)} />
+                <PdfTextValue field="date" value={data.date} onChange={(value) => onUpdate('date', value)} />
+              </>
+            )}
+            {!invoice && (
+              <>
+                <b>DATE</b>
+                <PdfTextValue field="date" value={data.date} onChange={(value) => onUpdate('date', value)} />
+              </>
+            )}
           </div>
         </div>
       </div>
 
       <div className={`document-middle ${invoice ? '' : 'quotation-middle'}`}>
-        <CustomerBox kind={kind} data={data} />
+        <CustomerBox kind={kind} data={data} onUpdateCustomer={onUpdateCustomer} />
         {invoice && (
           <div className="doc-box bank-box">
             <div className="box-title">Bank Detail</div>
@@ -451,21 +575,27 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
           {data.items.map((item, index) => (
             <div className="work-item" key={index}>
               <div className="description preserve">
-                <span data-pdf-field={`item-${index + 1}-description`} data-multiline="true">
-                  {item.description}
-                </span>
+                <PdfTextValue
+                  field={`item-${index + 1}-description`}
+                  value={item.description}
+                  onChange={(value) => onUpdateItem(index, 'description', value)}
+                  multiline
+                />
               </div>
               <div className="amount">
                 {invoice ? (
-                  <FittedPdfValue field={`item-${index + 1}-amount`} value={item.amount} />
+                  <FittedPdfValue
+                    field={`item-${index + 1}-amount`}
+                    value={item.amount}
+                    onChange={(value) => onUpdateItem(index, 'amount', value)}
+                  />
                 ) : (
-                  <span
-                    className="preserve"
-                    data-pdf-field={`item-${index + 1}-amount`}
-                    data-multiline="true"
-                  >
-                    {item.amount}
-                  </span>
+                  <PdfTextValue
+                    field={`item-${index + 1}-amount`}
+                    value={item.amount}
+                    onChange={(value) => onUpdateItem(index, 'amount', value)}
+                    multiline
+                  />
                 )}
               </div>
             </div>
@@ -477,7 +607,7 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
             <div className="invoice-summary">
               <div className="summary-row">
                 <b>Total</b>
-                <FittedPdfValue field="total" value={data.total} />
+                <FittedPdfValue field="total" value={data.total} onChange={onUpdateTotal} />
               </div>
               <div className="summary-row">
                 <b>Total + GST</b>
@@ -485,7 +615,7 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
               </div>
               <div className="summary-row">
                 <b>Deposit (10%)</b>
-                <FittedPdfValue field="deposit" value={data.deposit} />
+                <FittedPdfValue field="deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} />
               </div>
               <div className="summary-row">
                 <b>Balance due</b>
@@ -501,7 +631,7 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
             <div className="invoice-summary">
               <div className="summary-row">
                 <b>Total</b>
-                <FittedPdfValue field="total" value={data.total} />
+                <FittedPdfValue field="total" value={data.total} onChange={onUpdateTotal} />
               </div>
               <div className="summary-row">
                 <b>Total + GST</b>
@@ -509,7 +639,7 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
               </div>
               <div className="summary-row">
                 <b>Deposit (10%)</b>
-                <FittedPdfValue field="deposit" value={data.deposit} />
+                <FittedPdfValue field="deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} />
               </div>
               <div className="summary-row">
                 <b>Balance due</b>
