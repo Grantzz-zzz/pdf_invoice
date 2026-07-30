@@ -1,11 +1,12 @@
 import html2canvas from 'html2canvas'
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
-import type { DocumentKind } from './types'
+import type { DocumentData, DocumentKind } from './types'
+import { buildPdfFilename } from './documentUtils'
 
 const A4_WIDTH = 595.28
 const A4_HEIGHT = 841.89
 
-export async function downloadFillablePdf(kind: DocumentKind) {
+export async function downloadFillablePdf(kind: DocumentKind, data: DocumentData) {
   const documentElement = document.getElementById('print-document')
   if (!documentElement) return
 
@@ -68,7 +69,7 @@ export async function downloadFillablePdf(kind: DocumentKind) {
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url
-  anchor.download = `sppainting-${kind}.pdf`
+  anchor.download = buildPdfFilename(kind, data)
   anchor.click()
   URL.revokeObjectURL(url)
 }

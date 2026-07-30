@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import { Check, FileCheck2, FileText, Printer, ReceiptText } from 'lucide-react'
 import type { DocumentData, DocumentKind } from './types'
 import { downloadFillablePdf } from './pdf'
+import { formatDocumentDate } from './documentUtils'
 
 const company = {
   abn: '46939484472',
@@ -11,37 +12,40 @@ const company = {
   website: 'www.sppaintingremodeling.com.au',
 }
 
-const initialData: Record<DocumentKind, DocumentData> = {
-  invoice: {
-    number: '5',
-    date: '19/07/2026',
-    customer: {
-      name: 'Jewel Builds',
-      abn: '36332367178',
-      address: '9 Shakespeare Grove,\nHawthorn, 3122',
-      phone: '0431480132',
-      email: 'jewelbuilds@gmail.com',
+function createInitialData(): Record<DocumentKind, DocumentData> {
+  const today = formatDocumentDate()
+  return {
+    invoice: {
+      number: '5',
+      date: today,
+      customer: {
+        name: 'Jewel Builds',
+        abn: '36332367178',
+        address: '9 Shakespeare Grove,\nHawthorn, 3122',
+        phone: '0431480132',
+        email: 'jewelbuilds@gmail.com',
+      },
+      description: 'Invoice for prepped and painted at exterior of your project.\n\n• 4 paint striper.',
+      amount: '',
+      total: '',
     },
-    description: 'Invoice for prepped and painted at exterior of your project.\n\n• 4 paint striper.',
-    amount: '',
-    total: '',
-  },
-  quotation: {
-    number: '',
-    date: '30/08/2025',
-    customer: { name: '', abn: '', address: '', phone: '', email: '' },
-    description: '',
-    amount: '',
-    total: '',
-  },
-  contract: {
-    number: '',
-    date: '',
-    customer: { name: '', abn: '', address: '', phone: '', email: '' },
-    description: '',
-    amount: '',
-    total: '',
-  },
+    quotation: {
+      number: '',
+      date: today,
+      customer: { name: '', abn: '', address: '', phone: '', email: '' },
+      description: '',
+      amount: '',
+      total: '',
+    },
+    contract: {
+      number: '',
+      date: today,
+      customer: { name: '', abn: '', address: '', phone: '', email: '' },
+      description: '',
+      amount: '',
+      total: '',
+    },
+  }
 }
 
 const nav: Array<{ id: DocumentKind; label: string; icon: typeof ReceiptText }> = [
@@ -77,7 +81,7 @@ function Field({
 
 function App() {
   const [active, setActive] = useState<DocumentKind>(getInitialDocument)
-  const [documents, setDocuments] = useState(initialData)
+  const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
   const data = documents[active]
 
@@ -100,7 +104,7 @@ function App() {
   const exportPdf = async () => {
     setExporting(true)
     try {
-      await downloadFillablePdf(active)
+      await downloadFillablePdf(active, data)
     } finally {
       setExporting(false)
     }

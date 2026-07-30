@@ -1,4 +1,5 @@
 import { mkdir, readFile } from 'node:fs/promises'
+import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { chromium } from 'playwright-core'
 import { PDFDocument } from 'pdf-lib'
@@ -6,6 +7,27 @@ import { PDFDocument } from 'pdf-lib'
 const root = process.cwd()
 const outputDirectory = path.join(root, 'test-results')
 await mkdir(outputDirectory, { recursive: true })
+
+const server = spawn(
+  process.execPath,
+  [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1'],
+  { cwd: root, stdio: 'ignore' },
+)
+
+async function waitForServer() {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      const response = await fetch('http://127.0.0.1:5173')
+      if (response.ok) return
+    } catch {
+      // Vite is still starting.
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100))
+  }
+  throw new Error('Vite did not start on http://127.0.0.1:5173')
+}
+
+await waitForServer()
 
 const browser = await chromium.launch({
   executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
@@ -42,9 +64,32 @@ try {
     const page = await context.newPage()
     await page.goto(`http://127.0.0.1:5173/?document=${kind}`)
 
+    const expectedToday = await page.evaluate(() => {
+      const now = new Date()
+      const day = String(now.getDate()).padStart(2, '0')
+      const month = String(now.getMonth() + 1).padStart(2, '0')
+      return `${day}/${month}/${now.getFullYear()}`
+    })
+    const dateField = page.getByLabel('Date')
+    if ((await dateField.inputValue()) !== expectedToday) {
+      throw new Error(`${kind}: new document did not start with today's date`)
+    }
+
+    const editedDate = '01/01/2030'
+    await dateField.fill(editedDate)
+    if (kind === 'quotation') await page.getByLabel('Name').fill('Acme & Sons / Melbourne')
+
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Download PDF' }).click()
     const download = await downloadPromise
+    const expectedFilename = kind === 'invoice'
+      ? 'Invoice-005-Jewel-Builds.pdf'
+      : 'Quotation-Acme-Sons-Melbourne.pdf'
+    if (download.suggestedFilename() !== expectedFilename) {
+      throw new Error(
+        `${kind}: expected filename ${expectedFilename}, received ${download.suggestedFilename()}`,
+      )
+    }
     const outputPath = path.join(outputDirectory, `${kind}.pdf`)
     await download.saveAs(outputPath)
 
@@ -64,6 +109,11 @@ try {
       throw new Error(
         `${kind}: field mismatch; missing [${missing.join(', ')}], unexpected [${unexpected.join(', ')}]`,
       )
+    }
+
+    const exportedDate = pdf.getForm().getTextField(`${kind}.date`).getText()
+    if (exportedDate !== editedDate) {
+      throw new Error(`${kind}: edited date was not preserved in the exported PDF`)
     }
 
     for (const field of pdf.getForm().getFields()) {
@@ -87,4 +137,5 @@ try {
   }
 } finally {
   await browser.close()
+  server.kill()
 }
