@@ -115,6 +115,9 @@ main { grid-column: 2; min-width: 0; }
 .meta-grid > *:nth-last-child(-n+2) { border-bottom: 0; }
 .meta-grid b { background: var(--paper-green); text-align: center; font-size: 12pt; }
 .quotation .document-meta { padding-top: 24px; }
+.quotation .document-meta h2 {
+  margin: 0 0 11px; color: #111; text-align: center; font-size: 13pt; font-weight: 700;
+}
 .quotation .meta-grid { grid-template-columns: 1fr; }
 .quotation .meta-grid > * { border-right: 0; }
 .quotation .meta-grid > *:not(:last-child) { border-bottom: 1px solid #222; }
@@ -134,6 +137,10 @@ main { grid-column: 2; min-width: 0; }
 .description [data-pdf-field] { display: block; width: 100%; min-height: 20mm; }
 .single-item .description [data-pdf-field] { min-height: 88mm; }
 .quotation .single-item .description [data-pdf-field] { min-height: 124mm; }
+.quotation .amount [data-pdf-field] {
+  min-height: 34mm; white-space: pre-wrap; overflow: visible; text-align: left;
+}
+.quotation .single-item .amount [data-pdf-field] { min-height: 124mm; }
 .amount [data-pdf-field], .work-footer [data-pdf-field] {
   display: block; width: 100%; min-width: 0; min-height: 1.25em; overflow: hidden; white-space: nowrap;
 }
@@ -161,9 +168,13 @@ main { grid-column: 2; min-width: 0; }
 .summary-row > * { padding: 5px 7px; }
 .summary-row b { border-right: 1px solid #222; line-height: 1.1; }
 .summary-row [data-pdf-field] { text-align: right; }
-.quotation .work-body { min-height: 146mm; }
-.quotation .work-footer { display: grid; grid-template-columns: 4fr 1fr; }
-.quotation .work-footer span { padding: 4px 7px; color: #111; border-right: 1px solid #222; font-size: 9.5pt; }
+.quotation .work-body { min-height: 124mm; }
+.quotation .single-item .description [data-pdf-field],
+.quotation .single-item .amount [data-pdf-field] { min-height: 102mm; }
+.quotation .quotation-footer { display: grid; grid-template-columns: 3.25fr 1.75fr; }
+.quotation-validity {
+  padding: 4px 7px; color: #111; border-right: 1px solid #222; font-size: 9.5pt;
+}
 .contract-pending {
   max-width: 580px; margin: 90px auto; padding: 55px; text-align: center; border-radius: 14px;
   background: white; border: 1px solid #dce3de; box-shadow: 0 12px 40px #1b35231a;
@@ -187,8 +198,11 @@ main { grid-column: 2; min-width: 0; }
   .topbar { height: 74px; padding: 14px 17px; }
   .workspace { display: block; }
   .editor-panel { border-right: 0; }
+  .field-grid { grid-template-columns: 1fr; }
   .preview-panel { overflow: hidden; padding: 18px 12px; }
-  .document-page { transform: scale(.46); margin-right: -123mm; margin-bottom: -160mm; }
+  .document-page {
+    transform: scale(.46); margin-left: 0; margin-right: -123mm; margin-bottom: -160mm;
+  }
 }
 
 @page { size: A4 portrait; margin: 0; }

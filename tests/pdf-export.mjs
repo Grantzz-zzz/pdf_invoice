@@ -62,6 +62,10 @@ const expected = {
     'quotation.item-1-amount',
     'quotation.item-2-description',
     'quotation.item-2-amount',
+    'quotation.total',
+    'quotation.gst',
+    'quotation.deposit',
+    'quotation.balance',
   ],
 }
 
@@ -95,7 +99,7 @@ try {
     await page.getByLabel('Description 2').fill('Apply two finish coats')
     await page.getByLabel('Amount 2').fill('$250.50')
 
-    if (kind === 'invoice') {
+    if (kind === 'invoice' || kind === 'quotation') {
       const displayedTotal = await page.getByLabel('Total before GST').inputValue()
       const displayedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
       const displayedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
@@ -118,7 +122,7 @@ try {
     }
 
     const longTotal = '$123,456,789.00'
-    if (kind === 'invoice') {
+    if (kind === 'invoice' || kind === 'quotation') {
       await page.getByLabel('Total before GST').fill(longTotal)
       if ((await page.getByLabel('Deposit (10%)').inputValue()) !== '$12,345,678.90') {
         throw new Error(`${kind}: changing total did not refresh the default 10% deposit`)
@@ -141,7 +145,7 @@ try {
     })
 
     const downloadPromise = page.waitForEvent('download')
-    await page.getByRole('button', { name: 'Download PDF' }).click()
+    await page.getByRole('button', { name: /Download PDF/ }).click()
     const download = await downloadPromise
     const expectedFilename = kind === 'invoice'
       ? 'Invoice-005-Jewel-Builds.pdf'
@@ -189,8 +193,8 @@ try {
       }
     }
 
-    if (kind === 'invoice') {
-      const totalField = pdf.getForm().getTextField('invoice.total')
+    if (kind === 'invoice' || kind === 'quotation') {
+      const totalField = pdf.getForm().getTextField(`${kind}.total`)
       const exportedTotal = totalField.getText()
       if (exportedTotal !== longTotal) {
         throw new Error(`${kind}: editable total override was not preserved in the exported PDF`)
@@ -204,7 +208,7 @@ try {
         balance: '$123,456,789.00',
       }
       for (const [fieldName, expectedText] of Object.entries(expectedSummary)) {
-        const summaryField = pdf.getForm().getTextField(`invoice.${fieldName}`)
+        const summaryField = pdf.getForm().getTextField(`${kind}.${fieldName}`)
         if (summaryField.getText() !== expectedText) {
           throw new Error(`${kind}: ${fieldName} formula was not preserved in the PDF`)
         }
@@ -212,21 +216,24 @@ try {
           throw new Error(`${kind}: ${fieldName} PDF field is not configured to auto-fit`)
         }
       }
-      if (!pdf.getForm().getTextField('invoice.gst').isReadOnly()) {
+      if (!pdf.getForm().getTextField(`${kind}.gst`).isReadOnly()) {
         throw new Error(`${kind}: GST-inclusive total PDF field should be read-only`)
       }
-      if (!pdf.getForm().getTextField('invoice.balance').isReadOnly()) {
+      if (!pdf.getForm().getTextField(`${kind}.balance`).isReadOnly()) {
         throw new Error(`${kind}: calculated balance PDF field should be read-only`)
       }
-      if (pdf.getForm().getTextField('invoice.deposit').isReadOnly()) {
+      if (pdf.getForm().getTextField(`${kind}.deposit`).isReadOnly()) {
         throw new Error(`${kind}: deposit PDF field should remain editable`)
       }
     }
 
     for (const itemNumber of [1, 2]) {
       const amountField = pdf.getForm().getTextField(`${kind}.item-${itemNumber}-amount`)
-      if (!/\s0(?:\.0+)?\s+Tf/.test(amountField.acroField.getDefaultAppearance() ?? '')) {
+      if (kind === 'invoice' && !/\s0(?:\.0+)?\s+Tf/.test(amountField.acroField.getDefaultAppearance() ?? '')) {
         throw new Error(`${kind}: item ${itemNumber} amount PDF field is not configured to auto-fit`)
+      }
+      if (kind === 'quotation' && !amountField.isMultiline()) {
+        throw new Error(`${kind}: price ${itemNumber} PDF field should allow writing on multiple lines`)
       }
     }
 
@@ -248,12 +255,23 @@ try {
       }
     }
 
-    await page.getByLabel('Amount 1').fill('$100')
+    if (await page.getByLabel('Name').inputValue()) {
+      throw new Error(`${kind}: customer details were not cleared after PDF generation`)
+    }
+    if (await page.getByLabel('Amount 1').inputValue()) {
+      throw new Error(`${kind}: work details were not cleared after PDF generation`)
+    }
+    if ((await page.getByLabel('Date').inputValue()) !== expectedToday) {
+      throw new Error(`${kind}: reset document did not retain today's automatic date`)
+    }
+
+    await page.getByRole('button', { name: 'Add item' }).click()
+    await page.getByLabel('Amount 1').fill(kind === 'quotation' ? '$60\n\n$40' : '$100')
     await page.getByRole('button', { name: 'Remove item 2' }).click()
     if (await page.getByLabel('Description 2').count()) {
       throw new Error(`${kind}: removed line item remained in the editor`)
     }
-    if (kind === 'invoice') {
+    if (kind === 'invoice' || kind === 'quotation') {
       const recalculatedTotal = await page.getByLabel('Total before GST').inputValue()
       const recalculatedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
       const recalculatedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
@@ -270,46 +288,90 @@ try {
     await context.close()
   }
 
-  const mobileContext = await browser.newContext({
-    acceptDownloads: true,
-    viewport: { width: 390, height: 844 },
-    isMobile: true,
-    hasTouch: true,
-  })
-  const mobilePage = await mobileContext.newPage()
-  await mobilePage.addInitScript(() => {
-    const revokeObjectUrl = URL.revokeObjectURL.bind(URL)
-    window.__pdfUrlRevocations = []
-    URL.revokeObjectURL = (url) => {
-      window.__pdfUrlRevocations.push(url)
-      revokeObjectUrl(url)
+  for (const kind of ['invoice', 'quotation']) {
+    const mobileContext = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { width: 390, height: 844 },
+      isMobile: true,
+      hasTouch: true,
+    })
+    const mobilePage = await mobileContext.newPage()
+    await mobilePage.addInitScript(() => {
+      const revokeObjectUrl = URL.revokeObjectURL.bind(URL)
+      window.__pdfUrlRevocations = []
+      URL.revokeObjectURL = (url) => {
+        window.__pdfUrlRevocations.push(url)
+        revokeObjectUrl(url)
+      }
+    })
+    await mobilePage.goto(`http://127.0.0.1:5173/?document=${kind}`)
+    await mobilePage.getByLabel('Name').fill('Mobile Client')
+    await mobilePage.getByLabel('Description 1').fill('Mobile layout test')
+    await mobilePage.getByLabel('Amount 1').fill('$500')
+
+    const mobileTotal = await mobilePage.getByLabel('Total before GST').inputValue()
+    const mobileBalance = await mobilePage.locator('.balance-field strong').textContent()
+    if (mobileTotal !== '$500.00' || mobileBalance !== '$500.00') {
+      throw new Error(`mobile ${kind}: payment formulas did not update from touch-sized inputs`)
     }
-  })
-  await mobilePage.goto('http://127.0.0.1:5173/?document=invoice')
 
-  const mobileDownloadPromise = mobilePage.waitForEvent('download')
-  await mobilePage.getByRole('button', { name: 'Download PDF' }).click()
-  const mobileDownload = await mobileDownloadPromise
-  if (mobileDownload.suggestedFilename() !== 'Invoice-005-Jewel-Builds.pdf') {
-    throw new Error(`mobile: unexpected filename ${mobileDownload.suggestedFilename()}`)
-  }
-  const mobileOutputPath = path.join(outputDirectory, 'invoice-mobile.pdf')
-  await mobileDownload.saveAs(mobileOutputPath)
+    const mobileLayout = await mobilePage.evaluate(() => ({
+      viewportWidth: document.documentElement.clientWidth,
+      contentWidth: document.documentElement.scrollWidth,
+      downloadVisible: Boolean(document.querySelector('.print-button')?.getBoundingClientRect().width),
+      documentLeft: document.querySelector('.document-page')?.getBoundingClientRect().left ?? -1,
+      documentRight: document.querySelector('.document-page')?.getBoundingClientRect().right ?? -1,
+    }))
+    if (mobileLayout.contentWidth > mobileLayout.viewportWidth + 2) {
+      throw new Error(
+        `mobile ${kind}: layout overflows horizontally (${mobileLayout.contentWidth}px > ${mobileLayout.viewportWidth}px)`,
+      )
+    }
+    if (!mobileLayout.downloadVisible) {
+      throw new Error(`mobile ${kind}: download control is not visible`)
+    }
+    if (mobileLayout.documentLeft < 0 || mobileLayout.documentRight > mobileLayout.viewportWidth) {
+      throw new Error(
+        `mobile ${kind}: A4 preview is clipped (${mobileLayout.documentLeft}px to ${mobileLayout.documentRight}px)`,
+      )
+    }
 
-  const immediateRevocations = await mobilePage.evaluate(() => window.__pdfUrlRevocations.length)
-  if (immediateRevocations !== 0) {
-    throw new Error('mobile: PDF blob URL was revoked before the browser finished the download')
-  }
+    await mobilePage.screenshot({
+      path: path.join(outputDirectory, `${kind}-mobile.png`),
+      fullPage: true,
+    })
 
-  const mobilePdf = await PDFDocument.load(await readFile(mobileOutputPath))
-  if (mobilePdf.getPages().length !== 1) {
-    throw new Error('mobile: invoice PDF should contain exactly one page')
+    const mobileDownloadPromise = mobilePage.waitForEvent('download')
+    await mobilePage.getByRole('button', { name: /Download PDF/ }).click()
+    const mobileDownload = await mobileDownloadPromise
+    const expectedMobileFilename = kind === 'invoice'
+      ? 'Invoice-005-Mobile-Client.pdf'
+      : 'Quotation-Mobile-Client.pdf'
+    if (mobileDownload.suggestedFilename() !== expectedMobileFilename) {
+      throw new Error(`mobile ${kind}: unexpected filename ${mobileDownload.suggestedFilename()}`)
+    }
+    const mobileOutputPath = path.join(outputDirectory, `${kind}-mobile.pdf`)
+    await mobileDownload.saveAs(mobileOutputPath)
+
+    const immediateRevocations = await mobilePage.evaluate(() => window.__pdfUrlRevocations.length)
+    if (immediateRevocations !== 0) {
+      throw new Error(`mobile ${kind}: PDF blob URL was revoked before download completion`)
+    }
+
+    const mobilePdf = await PDFDocument.load(await readFile(mobileOutputPath))
+    if (mobilePdf.getPages().length !== 1) {
+      throw new Error(`mobile ${kind}: PDF should contain exactly one page`)
+    }
+    if (!mobilePdf.getForm().getFields().length) {
+      throw new Error(`mobile ${kind}: downloaded PDF has no editable fields`)
+    }
+    if (await mobilePage.getByLabel('Name').inputValue()) {
+      throw new Error(`mobile ${kind}: form did not clear after download`)
+    }
+
+    console.log(`mobile ${kind}: PASS — responsive editor, formulas, download, and reset`)
+    await mobileContext.close()
   }
-  if (!mobilePdf.getForm().getFields().length) {
-    throw new Error('mobile: downloaded invoice PDF has no editable fields')
-  }
-  console.log('mobile invoice: PASS — download completed without an early blob URL revocation')
-  await mobileContext.close()
 } finally {
   await browser.close()
   server.kill()

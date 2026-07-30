@@ -57,6 +57,17 @@ function createInitialData(): Record<DocumentKind, DocumentData> {
   }
 }
 
+function createBlankDocument(): DocumentData {
+  return {
+    number: '',
+    date: formatDocumentDate(),
+    customer: { name: '', abn: '', address: '', phone: '', email: '' },
+    items: [{ description: '', amount: '' }],
+    total: '',
+    deposit: '',
+  }
+}
+
 const nav: Array<{ id: DocumentKind; label: string; icon: typeof ReceiptText }> = [
   { id: 'invoice', label: 'Invoice', icon: ReceiptText },
   { id: 'quotation', label: 'Quotation', icon: FileText },
@@ -136,8 +147,9 @@ function App() {
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
   const data = documents[active]
-  const totalWithGst = active === 'invoice' ? calculateTotalWithGst(data.total) : ''
-  const balance = active === 'invoice' ? calculateBalance(data.total, data.deposit) : ''
+  const supportsPaymentSummary = active !== 'contract'
+  const totalWithGst = supportsPaymentSummary ? calculateTotalWithGst(data.total) : ''
+  const balance = supportsPaymentSummary ? calculateBalance(data.total, data.deposit) : ''
 
   const title = useMemo(
     () => nav.find((item) => item.id === active)?.label ?? 'Invoice',
@@ -161,7 +173,7 @@ function App() {
         itemIndex === index ? { ...item, [key]: value } : item
       ))
       const document = { ...current[active], items }
-      if (active === 'invoice' && key === 'amount') {
+      if (active !== 'contract' && key === 'amount') {
         document.total = calculateDocumentTotal(document)
         document.deposit = calculateDefaultDeposit(document.total)
       }
@@ -178,7 +190,7 @@ function App() {
       if (current[active].items.length === 1) return current
       const items = current[active].items.filter((_, itemIndex) => itemIndex !== index)
       const document = { ...current[active], items }
-      if (active === 'invoice') {
+      if (active !== 'contract') {
         document.total = calculateDocumentTotal(document)
         document.deposit = calculateDefaultDeposit(document.total)
       }
@@ -186,11 +198,11 @@ function App() {
     })
   }
 
-  const updateInvoiceTotal = (value: string) => {
+  const updatePaymentTotal = (value: string) => {
     setDocuments((current) => ({
       ...current,
-      invoice: {
-        ...current.invoice,
+      [active]: {
+        ...current[active],
         total: value,
         deposit: calculateDefaultDeposit(value),
       },
@@ -201,6 +213,7 @@ function App() {
     setExporting(true)
     try {
       await downloadFillablePdf(active, data)
+      setDocuments((current) => ({ ...current, [active]: createBlankDocument() }))
     } finally {
       setExporting(false)
     }
@@ -248,7 +261,7 @@ function App() {
           </div>
           <button className="print-button" onClick={exportPdf} disabled={active === 'contract' || exporting}>
             <Printer size={18} />
-            {exporting ? 'Creating PDF…' : 'Download PDF'}
+            {exporting ? 'Creating PDF…' : 'Download PDF & Clear'}
           </button>
         </header>
 
@@ -324,14 +337,15 @@ function App() {
                         label={`Amount ${index + 1}`}
                         value={item.amount}
                         onChange={(value) => updateItem(index, 'amount', value)}
+                        multiline={active === 'quotation'}
                       />
                     </div>
                   ))}
                 </div>
-                {active === 'invoice' && (
+                {supportsPaymentSummary && (
                   <div className="payment-editor">
                     <h4>Payment summary</h4>
-                    <Field label="Total before GST" value={data.total} onChange={updateInvoiceTotal} />
+                    <Field label="Total before GST" value={data.total} onChange={updatePaymentTotal} />
                     <div className="calculated-field">
                       <span>Total + GST (10%)</span>
                       <strong>{totalWithGst || '—'}</strong>
@@ -397,14 +411,14 @@ function CustomerBox({ kind, data }: { kind: DocumentKind; data: DocumentData })
 
 function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }) {
   const invoice = kind === 'invoice'
-  const totalWithGst = invoice ? calculateTotalWithGst(data.total) : ''
-  const balance = invoice ? calculateBalance(data.total, data.deposit) : ''
+  const totalWithGst = calculateTotalWithGst(data.total)
+  const balance = calculateBalance(data.total, data.deposit)
   return (
     <article className={`document-page ${kind}`} id="print-document">
       <div className="document-top">
         <BusinessHeader />
         <div className="document-meta">
-          <h2>{invoice ? 'Invoice' : ''}</h2>
+          <h2>{invoice ? 'Invoice' : 'QUOTATION AND CONTRACT'}</h2>
           <div className="meta-grid">
             {invoice && <><b>INVOICE #</b><b>DATE</b><span data-pdf-field="number">{data.number}</span><span data-pdf-field="date">{data.date}</span></>}
             {!invoice && <><b>DATE</b><span data-pdf-field="date">{data.date}</span></>}
@@ -442,7 +456,17 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
                 </span>
               </div>
               <div className="amount">
-                <FittedPdfValue field={`item-${index + 1}-amount`} value={item.amount} />
+                {invoice ? (
+                  <FittedPdfValue field={`item-${index + 1}-amount`} value={item.amount} />
+                ) : (
+                  <span
+                    className="preserve"
+                    data-pdf-field={`item-${index + 1}-amount`}
+                    data-multiline="true"
+                  >
+                    {item.amount}
+                  </span>
+                )}
               </div>
             </div>
           ))}
@@ -470,8 +494,28 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
             </div>
           </div>
         ) : (
-          <div className="work-footer">
-            <span>This quotation is valid for a period of 30 days from the date of quoting</span>
+          <div className="work-footer quotation-footer">
+            <span className="quotation-validity">
+              This quotation is valid for a period of 30 days from the date of quoting
+            </span>
+            <div className="invoice-summary">
+              <div className="summary-row">
+                <b>Total</b>
+                <FittedPdfValue field="total" value={data.total} />
+              </div>
+              <div className="summary-row">
+                <b>Total + GST</b>
+                <FittedPdfValue field="gst" value={totalWithGst} readOnly />
+              </div>
+              <div className="summary-row">
+                <b>Deposit (10%)</b>
+                <FittedPdfValue field="deposit" value={data.deposit} />
+              </div>
+              <div className="summary-row">
+                <b>Balance due</b>
+                <FittedPdfValue field="balance" value={balance} readOnly />
+              </div>
+            </div>
           </div>
         )}
       </div>

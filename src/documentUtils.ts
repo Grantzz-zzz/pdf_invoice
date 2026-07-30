@@ -29,10 +29,11 @@ export function buildPdfFilename(kind: DocumentKind, data: DocumentData) {
 }
 
 function numericAmount(value: string) {
-  const normalized = value.replace(/,/g, '').replace(/[^0-9.-]/g, '')
-  if (!normalized || normalized === '-' || normalized === '.') return 0
-  const amount = Number.parseFloat(normalized)
-  return Number.isFinite(amount) ? amount : 0
+  const values = value.replace(/,/g, '').match(/-?(?:\d+\.?\d*|\.\d+)/g) ?? []
+  return values.reduce((sum, entry) => {
+    const amount = Number.parseFloat(entry)
+    return Number.isFinite(amount) ? sum + amount : sum
+  }, 0)
 }
 
 function formatAmount(amount: number, sourceValues: string[]) {
