@@ -35,16 +35,35 @@ function numericAmount(value: string) {
   return Number.isFinite(amount) ? amount : 0
 }
 
+function formatAmount(amount: number, sourceValues: string[]) {
+  const rounded = Math.round(amount * 100) / 100
+  const formatted = rounded.toLocaleString('en-AU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return sourceValues.some((value) => value.includes('$')) ? `$${formatted}` : formatted
+}
+
 export function calculateDocumentTotal(data: DocumentData) {
   const populatedAmounts = data.items.map((item) => item.amount.trim()).filter(Boolean)
   if (populatedAmounts.length === 0) return ''
 
-  const subtotal = populatedAmounts.reduce((sum, amount) => sum + numericAmount(amount), 0)
-  const total = Math.round(subtotal * 1.1 * 100) / 100
-  const usesCurrencySymbol = populatedAmounts.some((amount) => amount.includes('$'))
-  const formatted = total.toLocaleString('en-AU', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })
-  return usesCurrencySymbol ? `$${formatted}` : formatted
+  const total = populatedAmounts.reduce((sum, amount) => sum + numericAmount(amount), 0)
+  return formatAmount(total, populatedAmounts)
+}
+
+export function calculateGst(total: string) {
+  if (!total.trim()) return ''
+  return formatAmount(numericAmount(total) * 0.1, [total])
+}
+
+export function calculateDefaultDeposit(total: string) {
+  if (!total.trim()) return ''
+  return formatAmount(numericAmount(total) * 0.1, [total])
+}
+
+export function calculateBalance(total: string, deposit: string) {
+  if (!total.trim()) return ''
+  const balance = numericAmount(total) + numericAmount(calculateGst(total)) - numericAmount(deposit)
+  return formatAmount(balance, [total, deposit])
 }

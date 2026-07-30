@@ -14,7 +14,7 @@ A template-matched document editor for Superior Plus Painting & Remodeling.
 - [x] New documents default to today's editable date
 - [x] Smart PDF filenames using document number and customer name
 - [x] Multiple aligned description/amount line items
-- [x] Automatic editable Invoice total with 10% GST
+- [x] Invoice payment summary: total, 10% GST, editable deposit, and remaining amount
 - [x] Supplied company logo
 - [ ] Add exact contract body after its reference image is supplied
 - [ ] Final pixel-level comparison against original source files

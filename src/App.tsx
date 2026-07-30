@@ -2,7 +2,13 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, FileCheck2, FileText, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react'
 import type { DocumentData, DocumentKind, WorkItem } from './types'
 import { downloadFillablePdf } from './pdf'
-import { calculateDocumentTotal, formatDocumentDate } from './documentUtils'
+import {
+  calculateBalance,
+  calculateDefaultDeposit,
+  calculateDocumentTotal,
+  calculateGst,
+  formatDocumentDate,
+} from './documentUtils'
 
 const company = {
   abn: '46939484472',
@@ -30,6 +36,7 @@ function createInitialData(): Record<DocumentKind, DocumentData> {
         amount: '',
       }],
       total: '',
+      deposit: '',
     },
     quotation: {
       number: '',
@@ -37,6 +44,7 @@ function createInitialData(): Record<DocumentKind, DocumentData> {
       customer: { name: '', abn: '', address: '', phone: '', email: '' },
       items: [{ description: '', amount: '' }],
       total: '',
+      deposit: '',
     },
     contract: {
       number: '',
@@ -44,6 +52,7 @@ function createInitialData(): Record<DocumentKind, DocumentData> {
       customer: { name: '', abn: '', address: '', phone: '', email: '' },
       items: [{ description: '', amount: '' }],
       total: '',
+      deposit: '',
     },
   }
 }
@@ -79,7 +88,15 @@ function Field({
   )
 }
 
-function FittedPdfValue({ field, value }: { field: string; value: string }) {
+function FittedPdfValue({
+  field,
+  value,
+  readOnly = false,
+}: {
+  field: string
+  value: string
+  readOnly?: boolean
+}) {
   const valueRef = useRef<HTMLSpanElement>(null)
 
   useLayoutEffect(() => {
@@ -103,7 +120,12 @@ function FittedPdfValue({ field, value }: { field: string; value: string }) {
   }, [value])
 
   return (
-    <span ref={valueRef} data-pdf-field={field} data-pdf-autofit="true">
+    <span
+      ref={valueRef}
+      data-pdf-field={field}
+      data-pdf-autofit="true"
+      data-pdf-readonly={readOnly ? 'true' : undefined}
+    >
       {value}
     </span>
   )
@@ -114,6 +136,8 @@ function App() {
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
   const data = documents[active]
+  const gst = active === 'invoice' ? calculateGst(data.total) : ''
+  const balance = active === 'invoice' ? calculateBalance(data.total, data.deposit) : ''
 
   const title = useMemo(
     () => nav.find((item) => item.id === active)?.label ?? 'Invoice',
@@ -139,6 +163,7 @@ function App() {
       const document = { ...current[active], items }
       if (active === 'invoice' && key === 'amount') {
         document.total = calculateDocumentTotal(document)
+        document.deposit = calculateDefaultDeposit(document.total)
       }
       return { ...current, [active]: document }
     })
@@ -153,9 +178,23 @@ function App() {
       if (current[active].items.length === 1) return current
       const items = current[active].items.filter((_, itemIndex) => itemIndex !== index)
       const document = { ...current[active], items }
-      if (active === 'invoice') document.total = calculateDocumentTotal(document)
+      if (active === 'invoice') {
+        document.total = calculateDocumentTotal(document)
+        document.deposit = calculateDefaultDeposit(document.total)
+      }
       return { ...current, [active]: document }
     })
+  }
+
+  const updateInvoiceTotal = (value: string) => {
+    setDocuments((current) => ({
+      ...current,
+      invoice: {
+        ...current.invoice,
+        total: value,
+        deposit: calculateDefaultDeposit(value),
+      },
+    }))
   }
 
   const exportPdf = async () => {
@@ -290,9 +329,23 @@ function App() {
                   ))}
                 </div>
                 {active === 'invoice' && (
-                  <div className="total-editor">
-                    <Field label="Total includes gst" value={data.total} onChange={(v) => update('total', v)} />
-                    <small>Item subtotal plus 10% GST. You can still edit it.</small>
+                  <div className="payment-editor">
+                    <h4>Payment summary</h4>
+                    <Field label="Total before GST" value={data.total} onChange={updateInvoiceTotal} />
+                    <div className="calculated-field">
+                      <span>GST (10%)</span>
+                      <strong>{gst || '—'}</strong>
+                    </div>
+                    <Field
+                      label="Deposit (10%)"
+                      value={data.deposit}
+                      onChange={(value) => update('deposit', value)}
+                    />
+                    <div className="calculated-field balance-field">
+                      <span>Remaining after deposit</span>
+                      <strong>{balance || '—'}</strong>
+                    </div>
+                    <small>Total + GST − deposit. Total and deposit remain editable.</small>
                   </div>
                 )}
               </div>
@@ -344,6 +397,8 @@ function CustomerBox({ kind, data }: { kind: DocumentKind; data: DocumentData })
 
 function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }) {
   const invoice = kind === 'invoice'
+  const gst = invoice ? calculateGst(data.total) : ''
+  const balance = invoice ? calculateBalance(data.total, data.deposit) : ''
   return (
     <article className={`document-page ${kind}`} id="print-document">
       <div className="document-top">
@@ -392,14 +447,33 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
             </div>
           ))}
         </div>
-        <div className="work-footer">
-          <span>
-            {invoice
-              ? 'Thank you for choosing our company'
-              : 'This quotation is valid for a period of 30 days from the date of quoting'}
-          </span>
-          {invoice && <><b>Total<br />includes gst</b><FittedPdfValue field="total" value={data.total} /></>}
-        </div>
+        {invoice ? (
+          <div className="work-footer invoice-footer">
+            <span className="footer-message">Thank you for choosing our company</span>
+            <div className="invoice-summary">
+              <div className="summary-row">
+                <b>Total</b>
+                <FittedPdfValue field="total" value={data.total} />
+              </div>
+              <div className="summary-row">
+                <b>GST (10%)</b>
+                <FittedPdfValue field="gst" value={gst} readOnly />
+              </div>
+              <div className="summary-row">
+                <b>Deposit (10%)</b>
+                <FittedPdfValue field="deposit" value={data.deposit} />
+              </div>
+              <div className="summary-row">
+                <b>Remaining</b>
+                <FittedPdfValue field="balance" value={balance} readOnly />
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="work-footer">
+            <span>This quotation is valid for a period of 30 days from the date of quoting</span>
+          </div>
+        )}
       </div>
     </article>
   )

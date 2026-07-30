@@ -76,8 +76,16 @@ main { grid-column: 2; min-width: 0; }
 .remove-item-button { width: 27px; height: 27px; border-radius: 5px; color: #9a443d; background: #f8ecea; }
 .remove-item-button:hover { background: #f3dfdc; }
 .item-editor .field:last-child { margin-bottom: 0; }
-.total-editor { padding-top: 13px; margin-top: 13px; border-top: 1px solid #e5e9e6; }
-.total-editor small { display: block; margin-top: -4px; color: #8a9790; font-size: 9px; }
+.payment-editor { padding-top: 13px; margin-top: 13px; border-top: 1px solid #e5e9e6; }
+.payment-editor h4 { margin: 0 0 11px; color: #365343; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.calculated-field {
+  display: flex; align-items: center; justify-content: space-between; min-height: 36px; padding: 8px 10px;
+  margin-bottom: 11px; border: 1px solid #e0e5e1; border-radius: 6px; background: #f2f5f2;
+}
+.calculated-field span { color: #68766e; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
+.calculated-field strong { color: #203b2b; font-size: 12px; }
+.balance-field { border-color: #b8d6c2; background: #edf7f0; }
+.payment-editor small { display: block; margin-top: -3px; color: #8a9790; font-size: 9px; line-height: 1.45; }
 .field { display: block; margin-bottom: 11px; }
 .field:last-child { margin-bottom: 0; }
 .field span { display: block; margin: 0 0 5px; color: #68766e; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
@@ -124,7 +132,7 @@ main { grid-column: 2; min-width: 0; }
 .box-body p [data-pdf-field] { min-width: 66%; }
 .box-body p.preserve [data-pdf-field] { min-width: 72%; min-height: 2.2em; vertical-align: top; }
 .description [data-pdf-field] { display: block; width: 100%; min-height: 20mm; }
-.single-item .description [data-pdf-field] { min-height: 108mm; }
+.single-item .description [data-pdf-field] { min-height: 88mm; }
 .quotation .single-item .description [data-pdf-field] { min-height: 124mm; }
 .amount [data-pdf-field], .work-footer [data-pdf-field] {
   display: block; width: 100%; min-width: 0; min-height: 1.25em; overflow: hidden; white-space: nowrap;
@@ -136,7 +144,7 @@ main { grid-column: 2; min-width: 0; }
 .work-head b { min-height: 35px; padding: 7px 8px; border-right: 1px solid #222; font-size: 12.5pt; }
 .work-head b:last-child { border-right: 0; text-align: center; }
 .work-body {
-  position: relative; display: grid; grid-template-columns: 4fr 1fr; align-content: start; min-height: 130mm;
+  position: relative; display: grid; grid-template-columns: 4fr 1fr; align-content: start; min-height: 110mm;
 }
 .work-body::after {
   content: ""; position: absolute; top: 0; bottom: 0; left: 80%; width: 1px; background: #222; pointer-events: none;
@@ -144,13 +152,18 @@ main { grid-column: 2; min-width: 0; }
 .work-item { display: contents; }
 .work-item > div { padding: 16px 8px 5px; }
 .amount { text-align: right; }
-.work-footer { display: grid; grid-template-columns: 3.25fr .75fr 1fr; min-height: 29px; border-top: 1px solid #222; }
-.work-footer > * { padding: 4px 7px; border-right: 1px solid #222; }
-.work-footer > *:last-child { border-right: 0; }
-.work-footer > span:first-child { color: #3c997e; }
+.work-footer { min-height: 29px; border-top: 1px solid #222; }
+.invoice-footer { display: grid; grid-template-columns: 3.25fr 1.75fr; }
+.footer-message { padding: 5px 7px; color: #3c997e; border-right: 1px solid #222; }
+.invoice-summary { display: grid; }
+.summary-row { display: grid; grid-template-columns: 3fr 4fr; min-height: 27px; border-bottom: 1px solid #222; }
+.summary-row:last-child { border-bottom: 0; }
+.summary-row > * { padding: 5px 7px; }
+.summary-row b { border-right: 1px solid #222; line-height: 1.1; }
+.summary-row [data-pdf-field] { text-align: right; }
 .quotation .work-body { min-height: 146mm; }
 .quotation .work-footer { display: grid; grid-template-columns: 4fr 1fr; }
-.quotation .work-footer span { color: #111; font-size: 9.5pt; }
+.quotation .work-footer span { padding: 4px 7px; color: #111; border-right: 1px solid #222; font-size: 9.5pt; }
 .contract-pending {
   max-width: 580px; margin: 90px auto; padding: 55px; text-align: center; border-radius: 14px;
   background: white; border: 1px solid #dce3de; box-shadow: 0 12px 40px #1b35231a;

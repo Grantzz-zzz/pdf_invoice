@@ -19,4 +19,5 @@ export interface DocumentData {
   customer: Customer
   items: WorkItem[]
   total: string
+  deposit: string
 }

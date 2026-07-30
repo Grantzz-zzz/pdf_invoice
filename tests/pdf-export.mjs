@@ -48,6 +48,9 @@ const expected = {
     'invoice.item-2-description',
     'invoice.item-2-amount',
     'invoice.total',
+    'invoice.gst',
+    'invoice.deposit',
+    'invoice.balance',
   ],
   quotation: [
     'quotation.date',
@@ -93,22 +96,42 @@ try {
     await page.getByLabel('Amount 2').fill('$250.50')
 
     if (kind === 'invoice') {
-      const displayedTotal = await page.getByLabel('Total includes gst').inputValue()
-      if (displayedTotal !== '$1,375.55') {
-        throw new Error(`${kind}: expected GST-inclusive total $1,375.55, received ${displayedTotal}`)
+      const displayedTotal = await page.getByLabel('Total before GST').inputValue()
+      const displayedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
+      const displayedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
+      const displayedBalance = await page.locator('.balance-field strong').textContent()
+      if (displayedTotal !== '$1,250.50') {
+        throw new Error(`${kind}: expected item total $1,250.50, received ${displayedTotal}`)
+      }
+      if (displayedGst !== '$125.05' || displayedDeposit !== '$125.05') {
+        throw new Error(`${kind}: expected matching 10% GST and deposit values`)
+      }
+      if (displayedBalance !== '$1,250.50') {
+        throw new Error(`${kind}: expected remaining balance $1,250.50, received ${displayedBalance}`)
+      }
+
+      await page.getByLabel('Deposit (10%)').fill('$100.00')
+      const overriddenBalance = await page.locator('.balance-field strong').textContent()
+      if (overriddenBalance !== '$1,275.55') {
+        throw new Error(`${kind}: editable deposit did not update the balance`)
       }
     }
 
     const longTotal = '$123,456,789.00'
     if (kind === 'invoice') {
-      await page.getByLabel('Total includes gst').fill(longTotal)
-      const totalLayout = await page.locator('[data-pdf-field="total"]').evaluate((element) => ({
-        fits: element.scrollWidth <= element.clientWidth + 1,
-        fontSize: Number.parseFloat(window.getComputedStyle(element).fontSize),
-      }))
-      if (!totalLayout.fits) throw new Error(`${kind}: long total overflowed its preview cell`)
-      if (totalLayout.fontSize < 10) {
-        throw new Error(`${kind}: long total became too small to read`)
+      await page.getByLabel('Total before GST').fill(longTotal)
+      if ((await page.getByLabel('Deposit (10%)').inputValue()) !== '$12,345,678.90') {
+        throw new Error(`${kind}: changing total did not refresh the default 10% deposit`)
+      }
+      for (const fieldName of ['total', 'gst', 'deposit', 'balance']) {
+        const fieldLayout = await page.locator(`[data-pdf-field="${fieldName}"]`).evaluate((element) => ({
+          fits: element.scrollWidth <= element.clientWidth + 1,
+          fontSize: Number.parseFloat(window.getComputedStyle(element).fontSize),
+        }))
+        if (!fieldLayout.fits) throw new Error(`${kind}: long ${fieldName} overflowed its preview cell`)
+        if (fieldLayout.fontSize < 10) {
+          throw new Error(`${kind}: long ${fieldName} became too small to read`)
+        }
       }
     }
 
@@ -175,6 +198,29 @@ try {
       if (!/\s0(?:\.0+)?\s+Tf/.test(totalField.acroField.getDefaultAppearance() ?? '')) {
         throw new Error(`${kind}: total PDF field is not configured to auto-fit future edits`)
       }
+      const expectedSummary = {
+        gst: '$12,345,678.90',
+        deposit: '$12,345,678.90',
+        balance: '$123,456,789.00',
+      }
+      for (const [fieldName, expectedText] of Object.entries(expectedSummary)) {
+        const summaryField = pdf.getForm().getTextField(`invoice.${fieldName}`)
+        if (summaryField.getText() !== expectedText) {
+          throw new Error(`${kind}: ${fieldName} formula was not preserved in the PDF`)
+        }
+        if (!/\s0(?:\.0+)?\s+Tf/.test(summaryField.acroField.getDefaultAppearance() ?? '')) {
+          throw new Error(`${kind}: ${fieldName} PDF field is not configured to auto-fit`)
+        }
+      }
+      if (!pdf.getForm().getTextField('invoice.gst').isReadOnly()) {
+        throw new Error(`${kind}: calculated GST PDF field should be read-only`)
+      }
+      if (!pdf.getForm().getTextField('invoice.balance').isReadOnly()) {
+        throw new Error(`${kind}: calculated balance PDF field should be read-only`)
+      }
+      if (pdf.getForm().getTextField('invoice.deposit').isReadOnly()) {
+        throw new Error(`${kind}: deposit PDF field should remain editable`)
+      }
     }
 
     for (const itemNumber of [1, 2]) {
@@ -202,14 +248,21 @@ try {
       }
     }
 
+    await page.getByLabel('Amount 1').fill('$5,000')
     await page.getByRole('button', { name: 'Remove item 2' }).click()
     if (await page.getByLabel('Description 2').count()) {
       throw new Error(`${kind}: removed line item remained in the editor`)
     }
     if (kind === 'invoice') {
-      const recalculatedTotal = await page.getByLabel('Total includes gst').inputValue()
-      if (recalculatedTotal !== '$1,100.00') {
-        throw new Error(`${kind}: removing an item did not recalculate the GST-inclusive total`)
+      const recalculatedTotal = await page.getByLabel('Total before GST').inputValue()
+      const recalculatedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
+      const recalculatedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
+      const recalculatedBalance = await page.locator('.balance-field strong').textContent()
+      if (recalculatedTotal !== '$5,000.00' || recalculatedDeposit !== '$500.00') {
+        throw new Error(`${kind}: removing an item did not recalculate total and deposit`)
+      }
+      if (recalculatedGst !== '$500.00' || recalculatedBalance !== '$5,000.00') {
+        throw new Error(`${kind}: client $5,000 GST/deposit example calculated incorrectly`)
       }
     }
 

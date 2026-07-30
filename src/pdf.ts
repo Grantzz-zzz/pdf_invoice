@@ -67,6 +67,7 @@ export async function downloadFillablePdf(kind: DocumentKind, data: DocumentData
       field.setFontSize(fontSize)
       field.updateAppearances(font)
     }
+    if (element.dataset.pdfReadonly === 'true') field.enableReadOnly()
   })
 
   const bytes = await pdf.save()
