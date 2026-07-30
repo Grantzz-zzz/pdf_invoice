@@ -94,8 +94,8 @@ try {
 
     if (kind === 'invoice') {
       const displayedTotal = await page.getByLabel('Total includes gst').inputValue()
-      if (displayedTotal !== '$1,250.50') {
-        throw new Error(`${kind}: expected automatic total $1,250.50, received ${displayedTotal}`)
+      if (displayedTotal !== '$1,375.55') {
+        throw new Error(`${kind}: expected GST-inclusive total $1,375.55, received ${displayedTotal}`)
       }
     }
 
@@ -208,8 +208,8 @@ try {
     }
     if (kind === 'invoice') {
       const recalculatedTotal = await page.getByLabel('Total includes gst').inputValue()
-      if (recalculatedTotal !== '$1,000.00') {
-        throw new Error(`${kind}: removing an item did not recalculate the total`)
+      if (recalculatedTotal !== '$1,100.00') {
+        throw new Error(`${kind}: removing an item did not recalculate the GST-inclusive total`)
       }
     }
 

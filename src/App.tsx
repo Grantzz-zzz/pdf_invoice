@@ -292,7 +292,7 @@ function App() {
                 {active === 'invoice' && (
                   <div className="total-editor">
                     <Field label="Total includes gst" value={data.total} onChange={(v) => update('total', v)} />
-                    <small>Calculated from item amounts. You can still edit it.</small>
+                    <small>Item subtotal plus 10% GST. You can still edit it.</small>
                   </div>
                 )}
               </div>

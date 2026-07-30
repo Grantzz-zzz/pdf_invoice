@@ -39,7 +39,8 @@ export function calculateDocumentTotal(data: DocumentData) {
   const populatedAmounts = data.items.map((item) => item.amount.trim()).filter(Boolean)
   if (populatedAmounts.length === 0) return ''
 
-  const total = populatedAmounts.reduce((sum, amount) => sum + numericAmount(amount), 0)
+  const subtotal = populatedAmounts.reduce((sum, amount) => sum + numericAmount(amount), 0)
+  const total = Math.round(subtotal * 1.1 * 100) / 100
   const usesCurrencySymbol = populatedAmounts.some((amount) => amount.includes('$'))
   const formatted = total.toLocaleString('en-AU', {
     minimumFractionDigits: 2,
