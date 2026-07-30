@@ -52,9 +52,9 @@ export function calculateDocumentTotal(data: DocumentData) {
   return formatAmount(total, populatedAmounts)
 }
 
-export function calculateGst(total: string) {
+export function calculateTotalWithGst(total: string) {
   if (!total.trim()) return ''
-  return formatAmount(numericAmount(total) * 0.1, [total])
+  return formatAmount(numericAmount(total) * 1.1, [total])
 }
 
 export function calculateDefaultDeposit(total: string) {
@@ -64,6 +64,6 @@ export function calculateDefaultDeposit(total: string) {
 
 export function calculateBalance(total: string, deposit: string) {
   if (!total.trim()) return ''
-  const balance = numericAmount(total) + numericAmount(calculateGst(total)) - numericAmount(deposit)
+  const balance = numericAmount(calculateTotalWithGst(total)) - numericAmount(deposit)
   return formatAmount(balance, [total, deposit])
 }

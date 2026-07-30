@@ -6,7 +6,7 @@ import {
   calculateBalance,
   calculateDefaultDeposit,
   calculateDocumentTotal,
-  calculateGst,
+  calculateTotalWithGst,
   formatDocumentDate,
 } from './documentUtils'
 
@@ -136,7 +136,7 @@ function App() {
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
   const data = documents[active]
-  const gst = active === 'invoice' ? calculateGst(data.total) : ''
+  const totalWithGst = active === 'invoice' ? calculateTotalWithGst(data.total) : ''
   const balance = active === 'invoice' ? calculateBalance(data.total, data.deposit) : ''
 
   const title = useMemo(
@@ -333,8 +333,8 @@ function App() {
                     <h4>Payment summary</h4>
                     <Field label="Total before GST" value={data.total} onChange={updateInvoiceTotal} />
                     <div className="calculated-field">
-                      <span>GST (10%)</span>
-                      <strong>{gst || '—'}</strong>
+                      <span>Total + GST (10%)</span>
+                      <strong>{totalWithGst || '—'}</strong>
                     </div>
                     <Field
                       label="Deposit (10%)"
@@ -342,10 +342,10 @@ function App() {
                       onChange={(value) => update('deposit', value)}
                     />
                     <div className="calculated-field balance-field">
-                      <span>Remaining after deposit</span>
+                      <span>Balance due</span>
                       <strong>{balance || '—'}</strong>
                     </div>
-                    <small>Total + GST − deposit. Total and deposit remain editable.</small>
+                    <small>GST-inclusive total − deposit. Total and deposit remain editable.</small>
                   </div>
                 )}
               </div>
@@ -397,7 +397,7 @@ function CustomerBox({ kind, data }: { kind: DocumentKind; data: DocumentData })
 
 function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }) {
   const invoice = kind === 'invoice'
-  const gst = invoice ? calculateGst(data.total) : ''
+  const totalWithGst = invoice ? calculateTotalWithGst(data.total) : ''
   const balance = invoice ? calculateBalance(data.total, data.deposit) : ''
   return (
     <article className={`document-page ${kind}`} id="print-document">
@@ -456,15 +456,15 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
                 <FittedPdfValue field="total" value={data.total} />
               </div>
               <div className="summary-row">
-                <b>GST (10%)</b>
-                <FittedPdfValue field="gst" value={gst} readOnly />
+                <b>Total + GST</b>
+                <FittedPdfValue field="gst" value={totalWithGst} readOnly />
               </div>
               <div className="summary-row">
                 <b>Deposit (10%)</b>
                 <FittedPdfValue field="deposit" value={data.deposit} />
               </div>
               <div className="summary-row">
-                <b>Remaining</b>
+                <b>Balance due</b>
                 <FittedPdfValue field="balance" value={balance} readOnly />
               </div>
             </div>

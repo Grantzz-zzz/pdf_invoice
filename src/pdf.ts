@@ -76,6 +76,13 @@ export async function downloadFillablePdf(kind: DocumentKind, data: DocumentData
   const anchor = document.createElement('a')
   anchor.href = url
   anchor.download = buildPdfFilename(kind, data)
+  anchor.rel = 'noopener'
+  anchor.style.display = 'none'
+  document.body.appendChild(anchor)
   anchor.click()
-  URL.revokeObjectURL(url)
+  anchor.remove()
+
+  // Mobile browsers may resolve the blob URL after the click handler returns.
+  // Revoking it immediately can turn the download into a 404 page.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
