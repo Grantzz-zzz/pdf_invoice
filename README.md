@@ -20,6 +20,7 @@ A template-matched document editor for Superior Plus Painting & Remodeling.
 - [x] Multiline quotation price fields for flexible vertical placement
 - [x] Successful PDF generation clears editable details for the next document
 - [x] Mobile direct-document editing with a one-tap form fallback
+- [x] Add line items directly from the mobile document view
 - [x] Supplied company logo
 - [ ] Add exact contract body after its reference image is supplied
 - [ ] Final pixel-level comparison against original source files

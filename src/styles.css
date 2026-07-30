@@ -61,6 +61,8 @@ main { grid-column: 2; min-width: 0; }
 .editor-heading, .preview-label { display: flex; justify-content: space-between; align-items: center; margin-bottom: 17px; }
 .editor-heading span, .preview-label span { font-size: 10px; font-weight: 850; letter-spacing: .11em; color: #506158; }
 .editor-heading small, .preview-label small { color: #9aa69f; font-size: 9px; }
+.preview-actions { display: flex; align-items: center; gap: 9px; }
+.mobile-add-item { display: none; }
 .form-section { padding: 17px; margin-bottom: 13px; background: white; border: 1px solid #e2e6e3; border-radius: 9px; }
 .form-section h3 { margin: 0 0 14px; color: #284333; font-family: Georgia, serif; font-size: 15px; font-weight: 600; }
 .items-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
@@ -218,6 +220,10 @@ main { grid-column: 2; min-width: 0; }
   .mobile-form-view .preview-panel { display: none; }
   .mobile-document-view .preview-panel { min-height: calc(100vh - 130px); }
   .mobile-document-view .preview-label small::before { content: "Pinch to zoom · "; }
+  .mobile-document-view .mobile-add-item {
+    display: inline-flex; align-items: center; gap: 4px; padding: 6px 9px; border: 0;
+    border-radius: 6px; color: white; background: #176e48; font-size: 10px; font-weight: 800;
+  }
   .document-page {
     transform: scale(.46); margin-left: 0; margin-right: -123mm; margin-bottom: -160mm;
   }

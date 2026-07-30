@@ -435,7 +435,13 @@ function App() {
             <section className="preview-panel">
               <div className="preview-label">
                 <span>PDF PREVIEW</span>
-                <small>A4 portrait</small>
+                <div className="preview-actions">
+                  <button type="button" className="mobile-add-item" onClick={addItem}>
+                    <Plus size={14} />
+                    Add item
+                  </button>
+                  <small>A4 portrait</small>
+                </div>
               </div>
               <DocumentPage
                 kind={active}

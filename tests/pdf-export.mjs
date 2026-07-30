@@ -317,10 +317,13 @@ try {
     await mobilePage.locator('.document-page [data-pdf-field="customer-name"]').fill('Mobile Client')
     await mobilePage.locator('.document-page [data-pdf-field="item-1-description"]').fill('Mobile layout test')
     await mobilePage.locator('.document-page [data-pdf-field="item-1-amount"]').fill('$500')
+    await mobilePage.locator('.mobile-add-item').click()
+    await mobilePage.locator('.document-page [data-pdf-field="item-2-description"]').fill('Second mobile item')
+    await mobilePage.locator('.document-page [data-pdf-field="item-2-amount"]').fill('$250')
 
     const mobileTotal = await mobilePage.locator('.document-page [data-pdf-field="total"]').textContent()
     const mobileBalance = await mobilePage.locator('.document-page [data-pdf-field="balance"]').textContent()
-    if (mobileTotal !== '$500.00' || mobileBalance !== '$500.00') {
+    if (mobileTotal !== '$750.00' || mobileBalance !== '$750.00') {
       throw new Error(`mobile ${kind}: payment formulas did not update from touch-sized inputs`)
     }
 
