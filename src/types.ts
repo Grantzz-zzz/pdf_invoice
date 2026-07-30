@@ -8,11 +8,15 @@ export interface Customer {
   email: string
 }
 
+export interface WorkItem {
+  description: string
+  amount: string
+}
+
 export interface DocumentData {
   number: string
   date: string
   customer: Customer
-  description: string
-  amount: string
+  items: WorkItem[]
   total: string
 }

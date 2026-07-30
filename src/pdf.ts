@@ -60,8 +60,13 @@ export async function downloadFillablePdf(kind: DocumentKind, data: DocumentData
       textColor: rgb(0, 0, 0),
       font,
     })
-    field.setFontSize(fontSize)
-    field.updateAppearances(font)
+    if (element.dataset.pdfAutofit === 'true') {
+      field.updateAppearances(font)
+      field.acroField.setFontSize(0)
+    } else {
+      field.setFontSize(fontSize)
+      field.updateAppearances(font)
+    }
   })
 
   const bytes = await pdf.save()

@@ -62,6 +62,22 @@ main { grid-column: 2; min-width: 0; }
 .editor-heading small, .preview-label small { color: #9aa69f; font-size: 9px; }
 .form-section { padding: 17px; margin-bottom: 13px; background: white; border: 1px solid #e2e6e3; border-radius: 9px; }
 .form-section h3 { margin: 0 0 14px; color: #284333; font-family: Georgia, serif; font-size: 15px; font-weight: 600; }
+.items-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.items-heading h3 { margin: 0; }
+.add-item-button, .remove-item-button {
+  display: inline-flex; align-items: center; justify-content: center; border: 0; color: #176e48; background: #e9f5ee;
+}
+.add-item-button { gap: 5px; padding: 6px 9px; border-radius: 6px; font-size: 10px; font-weight: 800; }
+.add-item-button:hover, .remove-item-button:hover { background: #dceee3; }
+.item-editors { display: grid; gap: 10px; }
+.item-editor { padding: 11px; border: 1px solid #e1e6e2; border-radius: 7px; background: #fafbfa; }
+.item-number { display: flex; align-items: center; justify-content: space-between; margin-bottom: 9px; }
+.item-number > span { color: #456050; font-size: 10px; font-weight: 850; text-transform: uppercase; letter-spacing: .06em; }
+.remove-item-button { width: 27px; height: 27px; border-radius: 5px; color: #9a443d; background: #f8ecea; }
+.remove-item-button:hover { background: #f3dfdc; }
+.item-editor .field:last-child { margin-bottom: 0; }
+.total-editor { padding-top: 13px; margin-top: 13px; border-top: 1px solid #e5e9e6; }
+.total-editor small { display: block; margin-top: -4px; color: #8a9790; font-size: 9px; }
 .field { display: block; margin-bottom: 11px; }
 .field:last-child { margin-bottom: 0; }
 .field span { display: block; margin: 0 0 5px; color: #68766e; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; }
@@ -107,21 +123,28 @@ main { grid-column: 2; min-width: 0; }
 [data-pdf-field] { display: inline-block; min-width: 12px; min-height: 1em; }
 .box-body p [data-pdf-field] { min-width: 66%; }
 .box-body p.preserve [data-pdf-field] { min-width: 72%; min-height: 2.2em; vertical-align: top; }
-.description { display: flex; }
-.description [data-pdf-field] { display: block; width: 100%; flex: 1; min-height: 108mm; }
-.quotation .description [data-pdf-field] { min-height: 124mm; }
-.amount [data-pdf-field], .work-footer [data-pdf-field] { width: 100%; min-height: 1.25em; }
+.description [data-pdf-field] { display: block; width: 100%; min-height: 20mm; }
+.single-item .description [data-pdf-field] { min-height: 108mm; }
+.quotation .single-item .description [data-pdf-field] { min-height: 124mm; }
+.amount [data-pdf-field], .work-footer [data-pdf-field] {
+  display: block; width: 100%; min-width: 0; min-height: 1.25em; overflow: hidden; white-space: nowrap;
+}
 .pdf-capturing [data-pdf-field] { visibility: hidden; }
 .quote-intro { margin: 0 0 16px; text-align: center; font-weight: 700; font-size: 12pt; }
 .work-table { border: 1px solid #222; }
 .work-head { display: grid; grid-template-columns: 4fr 1fr; background: var(--paper-green); border-bottom: 1px solid #222; }
 .work-head b { min-height: 35px; padding: 7px 8px; border-right: 1px solid #222; font-size: 12.5pt; }
 .work-head b:last-child { border-right: 0; text-align: center; }
-.work-body { display: grid; grid-template-columns: 4fr 1fr; min-height: 130mm; }
-.work-body > div { padding: 16px 8px; border-right: 1px solid #222; }
-.work-body > div:last-child { border-right: 0; }
+.work-body {
+  position: relative; display: grid; grid-template-columns: 4fr 1fr; align-content: start; min-height: 130mm;
+}
+.work-body::after {
+  content: ""; position: absolute; top: 0; bottom: 0; left: 80%; width: 1px; background: #222; pointer-events: none;
+}
+.work-item { display: contents; }
+.work-item > div { padding: 16px 8px 5px; }
 .amount { text-align: right; }
-.work-footer { display: grid; grid-template-columns: 4fr .72fr .48fr; min-height: 29px; border-top: 1px solid #222; }
+.work-footer { display: grid; grid-template-columns: 3.25fr .75fr 1fr; min-height: 29px; border-top: 1px solid #222; }
 .work-footer > * { padding: 4px 7px; border-right: 1px solid #222; }
 .work-footer > *:last-child { border-right: 0; }
 .work-footer > span:first-child { color: #3c997e; }

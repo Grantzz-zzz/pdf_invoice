@@ -43,8 +43,10 @@ const expected = {
     'invoice.customer-address',
     'invoice.customer-phone',
     'invoice.customer-email',
-    'invoice.description',
-    'invoice.amount',
+    'invoice.item-1-description',
+    'invoice.item-1-amount',
+    'invoice.item-2-description',
+    'invoice.item-2-amount',
     'invoice.total',
   ],
   quotation: [
@@ -53,14 +55,19 @@ const expected = {
     'quotation.customer-address',
     'quotation.customer-phone',
     'quotation.customer-email',
-    'quotation.description',
-    'quotation.amount',
+    'quotation.item-1-description',
+    'quotation.item-1-amount',
+    'quotation.item-2-description',
+    'quotation.item-2-amount',
   ],
 }
 
 try {
   for (const [kind, expectedFields] of Object.entries(expected)) {
-    const context = await browser.newContext({ acceptDownloads: true })
+    const context = await browser.newContext({
+      acceptDownloads: true,
+      viewport: { width: 1440, height: 1100 },
+    })
     const page = await context.newPage()
     await page.goto(`http://127.0.0.1:5173/?document=${kind}`)
 
@@ -78,6 +85,37 @@ try {
     const editedDate = '01/01/2030'
     await dateField.fill(editedDate)
     if (kind === 'quotation') await page.getByLabel('Name').fill('Acme & Sons / Melbourne')
+
+    await page.getByLabel('Description 1').fill('Prepare exterior walls')
+    await page.getByLabel('Amount 1').fill('$1,000')
+    await page.getByRole('button', { name: 'Add item' }).click()
+    await page.getByLabel('Description 2').fill('Apply two finish coats')
+    await page.getByLabel('Amount 2').fill('$250.50')
+
+    if (kind === 'invoice') {
+      const displayedTotal = await page.getByLabel('Total includes gst').inputValue()
+      if (displayedTotal !== '$1,250.50') {
+        throw new Error(`${kind}: expected automatic total $1,250.50, received ${displayedTotal}`)
+      }
+    }
+
+    const longTotal = '$123,456,789.00'
+    if (kind === 'invoice') {
+      await page.getByLabel('Total includes gst').fill(longTotal)
+      const totalLayout = await page.locator('[data-pdf-field="total"]').evaluate((element) => ({
+        fits: element.scrollWidth <= element.clientWidth + 1,
+        fontSize: Number.parseFloat(window.getComputedStyle(element).fontSize),
+      }))
+      if (!totalLayout.fits) throw new Error(`${kind}: long total overflowed its preview cell`)
+      if (totalLayout.fontSize < 10) {
+        throw new Error(`${kind}: long total became too small to read`)
+      }
+    }
+
+    await page.screenshot({
+      path: path.join(outputDirectory, `${kind}-line-items.png`),
+      fullPage: true,
+    })
 
     const downloadPromise = page.waitForEvent('download')
     await page.getByRole('button', { name: 'Download PDF' }).click()
@@ -116,6 +154,36 @@ try {
       throw new Error(`${kind}: edited date was not preserved in the exported PDF`)
     }
 
+    for (const [fieldName, expectedText] of [
+      [`${kind}.item-1-description`, 'Prepare exterior walls'],
+      [`${kind}.item-1-amount`, '$1,000'],
+      [`${kind}.item-2-description`, 'Apply two finish coats'],
+      [`${kind}.item-2-amount`, '$250.50'],
+    ]) {
+      const exportedText = pdf.getForm().getTextField(fieldName).getText()
+      if (exportedText !== expectedText) {
+        throw new Error(`${kind}: ${fieldName} did not preserve its line-item value`)
+      }
+    }
+
+    if (kind === 'invoice') {
+      const totalField = pdf.getForm().getTextField('invoice.total')
+      const exportedTotal = totalField.getText()
+      if (exportedTotal !== longTotal) {
+        throw new Error(`${kind}: editable total override was not preserved in the exported PDF`)
+      }
+      if (!/\s0(?:\.0+)?\s+Tf/.test(totalField.acroField.getDefaultAppearance() ?? '')) {
+        throw new Error(`${kind}: total PDF field is not configured to auto-fit future edits`)
+      }
+    }
+
+    for (const itemNumber of [1, 2]) {
+      const amountField = pdf.getForm().getTextField(`${kind}.item-${itemNumber}-amount`)
+      if (!/\s0(?:\.0+)?\s+Tf/.test(amountField.acroField.getDefaultAppearance() ?? '')) {
+        throw new Error(`${kind}: item ${itemNumber} amount PDF field is not configured to auto-fit`)
+      }
+    }
+
     for (const field of pdf.getForm().getFields()) {
       const widget = field.acroField.getWidgets()[0]
       const rectangle = widget.getRectangle()
@@ -126,10 +194,23 @@ try {
       }
     }
 
-    const description = pdf.getForm().getTextField(`${kind}.description`)
-    const descriptionRectangle = description.acroField.getWidgets()[0].getRectangle()
-    if (descriptionRectangle.width < 250 || descriptionRectangle.height < 200) {
-      throw new Error(`${kind}: description field does not cover the work-description area`)
+    for (const itemNumber of [1, 2]) {
+      const description = pdf.getForm().getTextField(`${kind}.item-${itemNumber}-description`)
+      const descriptionRectangle = description.acroField.getWidgets()[0].getRectangle()
+      if (descriptionRectangle.width < 250 || descriptionRectangle.height < 35) {
+        throw new Error(`${kind}: item ${itemNumber} description field is too small`)
+      }
+    }
+
+    await page.getByRole('button', { name: 'Remove item 2' }).click()
+    if (await page.getByLabel('Description 2').count()) {
+      throw new Error(`${kind}: removed line item remained in the editor`)
+    }
+    if (kind === 'invoice') {
+      const recalculatedTotal = await page.getByLabel('Total includes gst').inputValue()
+      if (recalculatedTotal !== '$1,000.00') {
+        throw new Error(`${kind}: removing an item did not recalculate the total`)
+      }
     }
 
     console.log(`${kind}: PASS — A4, 1 page, ${names.length} editable fields`)

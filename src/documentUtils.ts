@@ -27,3 +27,23 @@ export function buildPdfFilename(kind: DocumentKind, data: DocumentData) {
   const parts = [type, number, customer].filter(Boolean)
   return `${parts.join('-')}.pdf`
 }
+
+function numericAmount(value: string) {
+  const normalized = value.replace(/,/g, '').replace(/[^0-9.-]/g, '')
+  if (!normalized || normalized === '-' || normalized === '.') return 0
+  const amount = Number.parseFloat(normalized)
+  return Number.isFinite(amount) ? amount : 0
+}
+
+export function calculateDocumentTotal(data: DocumentData) {
+  const populatedAmounts = data.items.map((item) => item.amount.trim()).filter(Boolean)
+  if (populatedAmounts.length === 0) return ''
+
+  const total = populatedAmounts.reduce((sum, amount) => sum + numericAmount(amount), 0)
+  const usesCurrencySymbol = populatedAmounts.some((amount) => amount.includes('$'))
+  const formatted = total.toLocaleString('en-AU', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+  return usesCurrencySymbol ? `$${formatted}` : formatted
+}

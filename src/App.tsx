@@ -1,8 +1,8 @@
-import { useMemo, useState } from 'react'
-import { Check, FileCheck2, FileText, Printer, ReceiptText } from 'lucide-react'
-import type { DocumentData, DocumentKind } from './types'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { Check, FileCheck2, FileText, Plus, Printer, ReceiptText, Trash2 } from 'lucide-react'
+import type { DocumentData, DocumentKind, WorkItem } from './types'
 import { downloadFillablePdf } from './pdf'
-import { formatDocumentDate } from './documentUtils'
+import { calculateDocumentTotal, formatDocumentDate } from './documentUtils'
 
 const company = {
   abn: '46939484472',
@@ -25,24 +25,24 @@ function createInitialData(): Record<DocumentKind, DocumentData> {
         phone: '0431480132',
         email: 'jewelbuilds@gmail.com',
       },
-      description: 'Invoice for prepped and painted at exterior of your project.\n\n• 4 paint striper.',
-      amount: '',
+      items: [{
+        description: 'Invoice for prepped and painted at exterior of your project.\n\n• 4 paint striper.',
+        amount: '',
+      }],
       total: '',
     },
     quotation: {
       number: '',
       date: today,
       customer: { name: '', abn: '', address: '', phone: '', email: '' },
-      description: '',
-      amount: '',
+      items: [{ description: '', amount: '' }],
       total: '',
     },
     contract: {
       number: '',
       date: today,
       customer: { name: '', abn: '', address: '', phone: '', email: '' },
-      description: '',
-      amount: '',
+      items: [{ description: '', amount: '' }],
       total: '',
     },
   }
@@ -79,6 +79,36 @@ function Field({
   )
 }
 
+function FittedPdfValue({ field, value }: { field: string; value: string }) {
+  const valueRef = useRef<HTMLSpanElement>(null)
+
+  useLayoutEffect(() => {
+    const element = valueRef.current
+    if (!element) return
+
+    element.style.fontSize = ''
+    const maximumSize = Number.parseFloat(window.getComputedStyle(element).fontSize)
+    const minimumSize = 10
+    if (element.scrollWidth <= element.clientWidth) return
+
+    let lower = minimumSize
+    let upper = maximumSize
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const candidate = (lower + upper) / 2
+      element.style.fontSize = `${candidate}px`
+      if (element.scrollWidth <= element.clientWidth) lower = candidate
+      else upper = candidate
+    }
+    element.style.fontSize = `${lower}px`
+  }, [value])
+
+  return (
+    <span ref={valueRef} data-pdf-field={field} data-pdf-autofit="true">
+      {value}
+    </span>
+  )
+}
+
 function App() {
   const [active, setActive] = useState<DocumentKind>(getInitialDocument)
   const [documents, setDocuments] = useState(createInitialData)
@@ -99,6 +129,33 @@ function App() {
 
   const updateCustomer = (key: keyof DocumentData['customer'], value: string) => {
     update('customer', { ...data.customer, [key]: value })
+  }
+
+  const updateItem = (index: number, key: keyof WorkItem, value: string) => {
+    setDocuments((current) => {
+      const items = current[active].items.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [key]: value } : item
+      ))
+      const document = { ...current[active], items }
+      if (active === 'invoice' && key === 'amount') {
+        document.total = calculateDocumentTotal(document)
+      }
+      return { ...current, [active]: document }
+    })
+  }
+
+  const addItem = () => {
+    update('items', [...data.items, { description: '', amount: '' }])
+  }
+
+  const removeItem = (index: number) => {
+    setDocuments((current) => {
+      if (current[active].items.length === 1) return current
+      const items = current[active].items.filter((_, itemIndex) => itemIndex !== index)
+      const document = { ...current[active], items }
+      if (active === 'invoice') document.total = calculateDocumentTotal(document)
+      return { ...current, [active]: document }
+    })
   }
 
   const exportPdf = async () => {
@@ -195,14 +252,49 @@ function App() {
                 </div>
               </div>
               <div className="form-section">
-                <h3>Work and price</h3>
-                <Field label="Description" value={data.description} onChange={(v) => update('description', v)} multiline />
-                <div className="field-grid">
-                  <Field label="Amount" value={data.amount} onChange={(v) => update('amount', v)} />
-                  {active === 'invoice' && (
-                    <Field label="Total includes gst" value={data.total} onChange={(v) => update('total', v)} />
-                  )}
+                <div className="items-heading">
+                  <h3>Work and price</h3>
+                  <button type="button" className="add-item-button" onClick={addItem}>
+                    <Plus size={14} />
+                    Add item
+                  </button>
                 </div>
+                <div className="item-editors">
+                  {data.items.map((item, index) => (
+                    <div className="item-editor" key={index}>
+                      <div className="item-number">
+                        <span>Item {index + 1}</span>
+                        {data.items.length > 1 && (
+                          <button
+                            type="button"
+                            className="remove-item-button"
+                            aria-label={`Remove item ${index + 1}`}
+                            onClick={() => removeItem(index)}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <Field
+                        label={`Description ${index + 1}`}
+                        value={item.description}
+                        onChange={(value) => updateItem(index, 'description', value)}
+                        multiline
+                      />
+                      <Field
+                        label={`Amount ${index + 1}`}
+                        value={item.amount}
+                        onChange={(value) => updateItem(index, 'amount', value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                {active === 'invoice' && (
+                  <div className="total-editor">
+                    <Field label="Total includes gst" value={data.total} onChange={(v) => update('total', v)} />
+                    <small>Calculated from item amounts. You can still edit it.</small>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -286,9 +378,19 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
           <b>{invoice ? 'DESCRIPTION' : 'DESCRIPTION OF WORK'}</b>
           <b>{invoice ? 'Amount' : 'PRICE'}</b>
         </div>
-        <div className="work-body">
-          <div className="description preserve"><span data-pdf-field="description" data-multiline="true">{data.description}</span></div>
-          <div className="amount"><span data-pdf-field="amount">{data.amount}</span></div>
+        <div className={`work-body ${data.items.length === 1 ? 'single-item' : 'multiple-items'}`}>
+          {data.items.map((item, index) => (
+            <div className="work-item" key={index}>
+              <div className="description preserve">
+                <span data-pdf-field={`item-${index + 1}-description`} data-multiline="true">
+                  {item.description}
+                </span>
+              </div>
+              <div className="amount">
+                <FittedPdfValue field={`item-${index + 1}-amount`} value={item.amount} />
+              </div>
+            </div>
+          ))}
         </div>
         <div className="work-footer">
           <span>
@@ -296,7 +398,7 @@ function DocumentPage({ kind, data }: { kind: DocumentKind; data: DocumentData }
               ? 'Thank you for choosing our company'
               : 'This quotation is valid for a period of 30 days from the date of quoting'}
           </span>
-          {invoice && <><b>Total<br />includes gst</b><span data-pdf-field="total">{data.total}</span></>}
+          {invoice && <><b>Total<br />includes gst</b><FittedPdfValue field="total" value={data.total} /></>}
         </div>
       </div>
     </article>
