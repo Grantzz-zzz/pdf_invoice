@@ -6,10 +6,38 @@ import { buildPdfFilename } from './documentUtils'
 const A4_WIDTH = 595.28
 const A4_HEIGHT = 841.89
 
+async function waitForDocumentImages(documentElement: HTMLElement) {
+  const images = Array.from(documentElement.querySelectorAll('img'))
+  await Promise.all(images.map(async (image) => {
+    if (!image.complete) {
+      await new Promise<void>((resolve, reject) => {
+        const timeout = window.setTimeout(
+          () => reject(new Error('A document image took too long to load.')),
+          10_000,
+        )
+        const finish = (error?: Error) => {
+          window.clearTimeout(timeout)
+          image.removeEventListener('load', loaded)
+          image.removeEventListener('error', failed)
+          if (error) reject(error)
+          else resolve()
+        }
+        const loaded = () => finish()
+        const failed = () => finish(new Error('A required document image could not be loaded.'))
+        image.addEventListener('load', loaded, { once: true })
+        image.addEventListener('error', failed, { once: true })
+      })
+    }
+    if (!image.naturalWidth) throw new Error('A required document image could not be loaded.')
+    await image.decode().catch(() => undefined)
+  }))
+}
+
 export async function downloadFillablePdf(kind: DocumentKind, data: DocumentData) {
   const documentElement = document.getElementById('print-document')
   if (!documentElement) return
 
+  await waitForDocumentImages(documentElement)
   documentElement.classList.add('pdf-capturing')
   let canvas: HTMLCanvasElement
   try {

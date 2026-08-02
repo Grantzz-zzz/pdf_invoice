@@ -6,25 +6,29 @@ import { PDFDocument } from 'pdf-lib'
 
 const root = process.cwd()
 const outputDirectory = path.join(root, 'test-results')
+const localBaseUrl = 'http://127.0.0.1:5173'
+const baseUrl = (process.env.TEST_BASE_URL || localBaseUrl).replace(/\/$/, '')
 await mkdir(outputDirectory, { recursive: true })
 
-const server = spawn(
-  process.execPath,
-  [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1'],
-  { cwd: root, stdio: 'ignore' },
-)
+const server = baseUrl === localBaseUrl
+  ? spawn(
+      process.execPath,
+      [path.join(root, 'node_modules', 'vite', 'bin', 'vite.js'), '--host', '127.0.0.1'],
+      { cwd: root, stdio: 'ignore' },
+    )
+  : null
 
 async function waitForServer() {
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
-      const response = await fetch('http://127.0.0.1:5173')
+      const response = await fetch(baseUrl)
       if (response.ok) return
     } catch {
       // Vite is still starting.
     }
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  throw new Error('Vite did not start on http://127.0.0.1:5173')
+  throw new Error(`Document app did not respond at ${baseUrl}`)
 }
 
 await waitForServer()
@@ -76,7 +80,11 @@ try {
       viewport: { width: 1440, height: 1100 },
     })
     const page = await context.newPage()
-    await page.goto(`http://127.0.0.1:5173/?document=${kind}`)
+    await page.goto(`${baseUrl}/?document=${kind}`)
+    await page.waitForFunction(() => (
+      Array.from(document.querySelectorAll('.document-page img'))
+        .every((image) => image.complete && image.naturalWidth > 0)
+    ))
     const editor = page.locator('.editor-panel')
 
     const expectedToday = await page.evaluate(() => {
@@ -305,7 +313,11 @@ try {
         revokeObjectUrl(url)
       }
     })
-    await mobilePage.goto(`http://127.0.0.1:5173/?document=${kind}`)
+    await mobilePage.goto(`${baseUrl}/?document=${kind}`)
+    await mobilePage.waitForFunction(() => (
+      Array.from(document.querySelectorAll('.document-page img'))
+        .every((image) => image.complete && image.naturalWidth > 0)
+    ))
     if (await mobilePage.locator('.editor-panel').isVisible()) {
       throw new Error(`mobile ${kind}: separate form should be hidden in direct document mode`)
     }
@@ -462,5 +474,5 @@ try {
   }
 } finally {
   await browser.close()
-  server.kill()
+  server?.kill()
 }

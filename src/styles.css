@@ -55,6 +55,10 @@ main { grid-column: 2; min-width: 0; }
   box-shadow: 0 4px 12px #145f3d24;
 }
 .print-button:disabled { opacity: .45; cursor: not-allowed; }
+.export-error {
+  padding: 9px 18px; color: #842d27; background: #fff0ee; border-bottom: 1px solid #efc4bf;
+  font-size: 12px; font-weight: 700; text-align: center;
+}
 .mobile-view-switch { display: none; }
 .mobile-field-editor { display: none; }
 .workspace { display: grid; grid-template-columns: 370px minmax(560px, 1fr); min-height: calc(100vh - 86px); }

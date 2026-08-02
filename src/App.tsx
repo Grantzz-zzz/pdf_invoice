@@ -202,6 +202,7 @@ function App() {
   const [active, setActive] = useState<DocumentKind>(getInitialDocument)
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
   const [mobileView, setMobileView] = useState<'document' | 'form'>('document')
   const [inlineEditor, setInlineEditor] = useState<InlineEditRequest | null>(null)
   const [inlineValue, setInlineValue] = useState('')
@@ -269,10 +270,13 @@ function App() {
   }
 
   const exportPdf = async () => {
+    setExportError('')
     setExporting(true)
     try {
       await downloadFillablePdf(active, data)
       setDocuments((current) => ({ ...current, [active]: createBlankDocument() }))
+    } catch {
+      setExportError('PDF could not be created. Check the connection and try again—your details were kept.')
     } finally {
       setExporting(false)
     }
@@ -333,6 +337,7 @@ function App() {
             {exporting ? 'Creating PDF…' : 'Download PDF & Clear'}
           </button>
         </header>
+        {exportError && <div className="export-error" role="alert">{exportError}</div>}
 
         {active !== 'contract' && (
           <div className="mobile-view-switch" aria-label="Mobile editing view">
