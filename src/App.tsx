@@ -75,6 +75,13 @@ const nav: Array<{ id: DocumentKind; label: string; icon: typeof ReceiptText }> 
 ]
 
 type UpdateDocument = <K extends keyof DocumentData>(key: K, value: DocumentData[K]) => void
+interface InlineEditRequest {
+  label: string
+  value: string
+  multiline: boolean
+  inputMode: 'text' | 'decimal' | 'numeric' | 'tel' | 'email'
+  onChange: (value: string) => void
+}
 
 function getInitialDocument(): DocumentKind {
   const requested = new URLSearchParams(window.location.search).get('document')
@@ -103,14 +110,20 @@ function Field({
 
 function FittedPdfValue({
   field,
+  label,
   value,
   readOnly = false,
   onChange,
+  onRequestEdit,
+  inputMode = 'decimal',
 }: {
   field: string
+  label: string
   value: string
   readOnly?: boolean
   onChange?: (value: string) => void
+  onRequestEdit: (request: InlineEditRequest) => void
+  inputMode?: InlineEditRequest['inputMode']
 }) {
   const valueRef = useRef<HTMLSpanElement>(null)
 
@@ -140,15 +153,12 @@ function FittedPdfValue({
       data-pdf-field={field}
       data-pdf-autofit="true"
       data-pdf-readonly={readOnly ? 'true' : undefined}
-      className={onChange && !readOnly ? 'inline-editable' : undefined}
-      contentEditable={Boolean(onChange) && !readOnly}
-      suppressContentEditableWarning
-      tabIndex={onChange && !readOnly ? 0 : undefined}
-      onInput={(event) => onChange?.(event.currentTarget.innerText)}
-      onKeyDown={(event) => {
-        if (event.key === 'Enter') {
-          event.preventDefault()
-          event.currentTarget.blur()
+      className={onChange && !readOnly ? 'inline-edit-trigger' : undefined}
+      role={onChange && !readOnly ? 'button' : undefined}
+      aria-label={onChange && !readOnly ? `Edit ${label}` : undefined}
+      onClick={() => {
+        if (onChange && !readOnly) {
+          onRequestEdit({ label, value, multiline: false, inputMode, onChange })
         }
       }}
     >
@@ -159,30 +169,29 @@ function FittedPdfValue({
 
 function PdfTextValue({
   field,
+  label,
   value,
   onChange,
+  onRequestEdit,
   multiline = false,
+  inputMode = 'text',
 }: {
   field: string
+  label: string
   value: string
   onChange: (value: string) => void
+  onRequestEdit: (request: InlineEditRequest) => void
   multiline?: boolean
+  inputMode?: InlineEditRequest['inputMode']
 }) {
   return (
     <span
-      className="inline-editable"
+      className="inline-edit-trigger"
       data-pdf-field={field}
       data-multiline={multiline ? 'true' : undefined}
-      contentEditable
-      suppressContentEditableWarning
-      tabIndex={0}
-      onInput={(event) => onChange(event.currentTarget.innerText)}
-      onKeyDown={(event) => {
-        if (!multiline && event.key === 'Enter') {
-          event.preventDefault()
-          event.currentTarget.blur()
-        }
-      }}
+      role="button"
+      aria-label={`Edit ${label}`}
+      onClick={() => onRequestEdit({ label, value, multiline, inputMode, onChange })}
     >
       {value}
     </span>
@@ -194,6 +203,8 @@ function App() {
   const [documents, setDocuments] = useState(createInitialData)
   const [exporting, setExporting] = useState(false)
   const [mobileView, setMobileView] = useState<'document' | 'form'>('document')
+  const [inlineEditor, setInlineEditor] = useState<InlineEditRequest | null>(null)
+  const [inlineValue, setInlineValue] = useState('')
   const data = documents[active]
   const supportsPaymentSummary = active !== 'contract'
   const totalWithGst = supportsPaymentSummary ? calculateTotalWithGst(data.total) : ''
@@ -267,6 +278,16 @@ function App() {
     }
   }
 
+  const requestInlineEdit = (request: InlineEditRequest) => {
+    setInlineValue(request.value)
+    setInlineEditor(request)
+  }
+
+  const updateInlineValue = (value: string) => {
+    setInlineValue(value)
+    inlineEditor?.onChange(value)
+  }
+
   return (
     <div className="app">
       <aside className="sidebar">
@@ -329,6 +350,53 @@ function App() {
             >
               Form
             </button>
+          </div>
+        )}
+
+        {inlineEditor && (
+          <div
+            className="mobile-field-editor"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Edit ${inlineEditor.label}`}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') setInlineEditor(null)
+            }}
+          >
+            <button
+              className="field-editor-backdrop"
+              type="button"
+              aria-label="Close field editor"
+              onClick={() => setInlineEditor(null)}
+            />
+            <section className="field-editor-sheet">
+              <div className="field-editor-heading">
+                <strong>{inlineEditor.label}</strong>
+                <button type="button" onClick={() => setInlineEditor(null)}>Done</button>
+              </div>
+              {inlineEditor.multiline ? (
+                <textarea
+                  aria-label={`${inlineEditor.label} editor`}
+                  value={inlineValue}
+                  onChange={(event) => updateInlineValue(event.target.value)}
+                  inputMode={inlineEditor.inputMode}
+                  spellCheck={inlineEditor.inputMode === 'text'}
+                  autoFocus
+                />
+              ) : (
+                <input
+                  aria-label={`${inlineEditor.label} editor`}
+                  value={inlineValue}
+                  onChange={(event) => updateInlineValue(event.target.value)}
+                  inputMode={inlineEditor.inputMode}
+                  spellCheck={inlineEditor.inputMode === 'text'}
+                  autoFocus
+                />
+              )}
+              {inlineEditor.multiline && (
+                <small>Use new lines to position text within this fixed box.</small>
+              )}
+            </section>
           </div>
         )}
 
@@ -436,6 +504,16 @@ function App() {
               <div className="preview-label">
                 <span>PDF PREVIEW</span>
                 <div className="preview-actions">
+                  {data.items.length > 1 && (
+                    <button
+                      type="button"
+                      className="mobile-remove-item"
+                      onClick={() => removeItem(data.items.length - 1)}
+                    >
+                      <Trash2 size={13} />
+                      Remove last
+                    </button>
+                  )}
                   <button type="button" className="mobile-add-item" onClick={addItem}>
                     <Plus size={14} />
                     Add item
@@ -450,6 +528,7 @@ function App() {
                 onUpdateCustomer={updateCustomer}
                 onUpdateItem={updateItem}
                 onUpdateTotal={updatePaymentTotal}
+                onRequestEdit={requestInlineEdit}
               />
             </section>
           </div>
@@ -478,35 +557,39 @@ function CustomerBox({
   kind,
   data,
   onUpdateCustomer,
+  onRequestEdit,
 }: {
   kind: DocumentKind
   data: DocumentData
   onUpdateCustomer: (key: keyof DocumentData['customer'], value: string) => void
+  onRequestEdit: (request: InlineEditRequest) => void
 }) {
   return (
     <div className="doc-box customer-box">
       <div className="box-title">{kind === 'invoice' ? 'Bill To' : 'CUSTOMER'}</div>
       <div className="box-body">
-        <p><b>Name:</b> <PdfTextValue field="customer-name" value={data.customer.name} onChange={(value) => onUpdateCustomer('name', value)} /></p>
+        <p><b>Name:</b> <PdfTextValue field="customer-name" label="Customer name" value={data.customer.name} onChange={(value) => onUpdateCustomer('name', value)} onRequestEdit={onRequestEdit} /></p>
         {kind === 'invoice' && (
-          <p><b>abn:</b> <PdfTextValue field="customer-abn" value={data.customer.abn} onChange={(value) => onUpdateCustomer('abn', value)} /></p>
+          <p><b>abn:</b> <PdfTextValue field="customer-abn" label="Customer ABN" value={data.customer.abn} onChange={(value) => onUpdateCustomer('abn', value)} onRequestEdit={onRequestEdit} inputMode="numeric" /></p>
         )}
         <p className="preserve">
           <b>Address:</b>{' '}
           <PdfTextValue
             field="customer-address"
+            label="Customer address"
             value={data.customer.address}
             onChange={(value) => onUpdateCustomer('address', value)}
+            onRequestEdit={onRequestEdit}
             multiline
           />
         </p>
         <p>
           <b>{kind === 'invoice' ? 'Phone:' : 'Number'}</b>{' '}
-          <PdfTextValue field="customer-phone" value={data.customer.phone} onChange={(value) => onUpdateCustomer('phone', value)} />
+          <PdfTextValue field="customer-phone" label="Customer phone" value={data.customer.phone} onChange={(value) => onUpdateCustomer('phone', value)} onRequestEdit={onRequestEdit} inputMode="tel" />
         </p>
         <p>
           <b>Email{kind === 'invoice' ? ':' : ''}</b>{' '}
-          <PdfTextValue field="customer-email" value={data.customer.email} onChange={(value) => onUpdateCustomer('email', value)} />
+          <PdfTextValue field="customer-email" label="Customer email" value={data.customer.email} onChange={(value) => onUpdateCustomer('email', value)} onRequestEdit={onRequestEdit} inputMode="email" />
         </p>
       </div>
     </div>
@@ -520,6 +603,7 @@ function DocumentPage({
   onUpdateCustomer,
   onUpdateItem,
   onUpdateTotal,
+  onRequestEdit,
 }: {
   kind: DocumentKind
   data: DocumentData
@@ -527,6 +611,7 @@ function DocumentPage({
   onUpdateCustomer: (key: keyof DocumentData['customer'], value: string) => void
   onUpdateItem: (index: number, key: keyof WorkItem, value: string) => void
   onUpdateTotal: (value: string) => void
+  onRequestEdit: (request: InlineEditRequest) => void
 }) {
   const invoice = kind === 'invoice'
   const totalWithGst = calculateTotalWithGst(data.total)
@@ -542,14 +627,14 @@ function DocumentPage({
               <>
                 <b>INVOICE #</b>
                 <b>DATE</b>
-                <PdfTextValue field="number" value={data.number} onChange={(value) => onUpdate('number', value)} />
-                <PdfTextValue field="date" value={data.date} onChange={(value) => onUpdate('date', value)} />
+                <PdfTextValue field="number" label="Invoice number" value={data.number} onChange={(value) => onUpdate('number', value)} onRequestEdit={onRequestEdit} inputMode="numeric" />
+                <PdfTextValue field="date" label="Date" value={data.date} onChange={(value) => onUpdate('date', value)} onRequestEdit={onRequestEdit} />
               </>
             )}
             {!invoice && (
               <>
                 <b>DATE</b>
-                <PdfTextValue field="date" value={data.date} onChange={(value) => onUpdate('date', value)} />
+                <PdfTextValue field="date" label="Date" value={data.date} onChange={(value) => onUpdate('date', value)} onRequestEdit={onRequestEdit} />
               </>
             )}
           </div>
@@ -557,7 +642,7 @@ function DocumentPage({
       </div>
 
       <div className={`document-middle ${invoice ? '' : 'quotation-middle'}`}>
-        <CustomerBox kind={kind} data={data} onUpdateCustomer={onUpdateCustomer} />
+        <CustomerBox kind={kind} data={data} onUpdateCustomer={onUpdateCustomer} onRequestEdit={onRequestEdit} />
         {invoice && (
           <div className="doc-box bank-box">
             <div className="box-title">Bank Detail</div>
@@ -583,8 +668,10 @@ function DocumentPage({
               <div className="description preserve">
                 <PdfTextValue
                   field={`item-${index + 1}-description`}
+                  label={`Description ${index + 1}`}
                   value={item.description}
                   onChange={(value) => onUpdateItem(index, 'description', value)}
+                  onRequestEdit={onRequestEdit}
                   multiline
                 />
               </div>
@@ -592,14 +679,19 @@ function DocumentPage({
                 {invoice ? (
                   <FittedPdfValue
                     field={`item-${index + 1}-amount`}
+                    label={`Amount ${index + 1}`}
                     value={item.amount}
                     onChange={(value) => onUpdateItem(index, 'amount', value)}
+                    onRequestEdit={onRequestEdit}
+                    inputMode="decimal"
                   />
                 ) : (
                   <PdfTextValue
                     field={`item-${index + 1}-amount`}
+                    label={`Price ${index + 1}`}
                     value={item.amount}
                     onChange={(value) => onUpdateItem(index, 'amount', value)}
+                    onRequestEdit={onRequestEdit}
                     multiline
                   />
                 )}
@@ -613,19 +705,19 @@ function DocumentPage({
             <div className="invoice-summary">
               <div className="summary-row">
                 <b>Total</b>
-                <FittedPdfValue field="total" value={data.total} onChange={onUpdateTotal} />
+                <FittedPdfValue field="total" label="Total before GST" value={data.total} onChange={onUpdateTotal} onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Total + GST</b>
-                <FittedPdfValue field="gst" value={totalWithGst} readOnly />
+                <FittedPdfValue field="gst" label="Total plus GST" value={totalWithGst} readOnly onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Deposit (10%)</b>
-                <FittedPdfValue field="deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} />
+                <FittedPdfValue field="deposit" label="Deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Balance due</b>
-                <FittedPdfValue field="balance" value={balance} readOnly />
+                <FittedPdfValue field="balance" label="Balance due" value={balance} readOnly onRequestEdit={onRequestEdit} />
               </div>
             </div>
           </div>
@@ -637,19 +729,19 @@ function DocumentPage({
             <div className="invoice-summary">
               <div className="summary-row">
                 <b>Total</b>
-                <FittedPdfValue field="total" value={data.total} onChange={onUpdateTotal} />
+                <FittedPdfValue field="total" label="Total before GST" value={data.total} onChange={onUpdateTotal} onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Total + GST</b>
-                <FittedPdfValue field="gst" value={totalWithGst} readOnly />
+                <FittedPdfValue field="gst" label="Total plus GST" value={totalWithGst} readOnly onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Deposit (10%)</b>
-                <FittedPdfValue field="deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} />
+                <FittedPdfValue field="deposit" label="Deposit" value={data.deposit} onChange={(value) => onUpdate('deposit', value)} onRequestEdit={onRequestEdit} />
               </div>
               <div className="summary-row">
                 <b>Balance due</b>
-                <FittedPdfValue field="balance" value={balance} readOnly />
+                <FittedPdfValue field="balance" label="Balance due" value={balance} readOnly onRequestEdit={onRequestEdit} />
               </div>
             </div>
           </div>

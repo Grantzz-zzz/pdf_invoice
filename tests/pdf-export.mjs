@@ -77,6 +77,7 @@ try {
     })
     const page = await context.newPage()
     await page.goto(`http://127.0.0.1:5173/?document=${kind}`)
+    const editor = page.locator('.editor-panel')
 
     const expectedToday = await page.evaluate(() => {
       const now = new Date()
@@ -84,24 +85,24 @@ try {
       const month = String(now.getMonth() + 1).padStart(2, '0')
       return `${day}/${month}/${now.getFullYear()}`
     })
-    const dateField = page.getByLabel('Date')
+    const dateField = editor.getByLabel('Date')
     if ((await dateField.inputValue()) !== expectedToday) {
       throw new Error(`${kind}: new document did not start with today's date`)
     }
 
     const editedDate = '01/01/2030'
     await dateField.fill(editedDate)
-    if (kind === 'quotation') await page.getByLabel('Name').fill('Acme & Sons / Melbourne')
+    if (kind === 'quotation') await editor.getByLabel('Name').fill('Acme & Sons / Melbourne')
 
-    await page.getByLabel('Description 1').fill('Prepare exterior walls')
-    await page.getByLabel('Amount 1').fill('$1,000')
+    await editor.getByLabel('Description 1').fill('Prepare exterior walls')
+    await editor.getByLabel('Amount 1').fill('$1,000')
     await page.getByRole('button', { name: 'Add item' }).click()
-    await page.getByLabel('Description 2').fill('Apply two finish coats')
-    await page.getByLabel('Amount 2').fill('$250.50')
+    await editor.getByLabel('Description 2').fill('Apply two finish coats')
+    await editor.getByLabel('Amount 2').fill('$250.50')
 
     if (kind === 'invoice' || kind === 'quotation') {
-      const displayedTotal = await page.getByLabel('Total before GST').inputValue()
-      const displayedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
+      const displayedTotal = await editor.getByLabel('Total before GST').inputValue()
+      const displayedDeposit = await editor.getByLabel('Deposit (10%)').inputValue()
       const displayedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
       const displayedBalance = await page.locator('.balance-field strong').textContent()
       if (displayedTotal !== '$1,250.50') {
@@ -114,7 +115,7 @@ try {
         throw new Error(`${kind}: expected remaining balance $1,250.50, received ${displayedBalance}`)
       }
 
-      await page.getByLabel('Deposit (10%)').fill('$100.00')
+      await editor.getByLabel('Deposit (10%)').fill('$100.00')
       const overriddenBalance = await page.locator('.balance-field strong').textContent()
       if (overriddenBalance !== '$1,275.55') {
         throw new Error(`${kind}: editable deposit did not update the balance`)
@@ -123,8 +124,8 @@ try {
 
     const longTotal = '$123,456,789.00'
     if (kind === 'invoice' || kind === 'quotation') {
-      await page.getByLabel('Total before GST').fill(longTotal)
-      if ((await page.getByLabel('Deposit (10%)').inputValue()) !== '$12,345,678.90') {
+      await editor.getByLabel('Total before GST').fill(longTotal)
+      if ((await editor.getByLabel('Deposit (10%)').inputValue()) !== '$12,345,678.90') {
         throw new Error(`${kind}: changing total did not refresh the default 10% deposit`)
       }
       for (const fieldName of ['total', 'gst', 'deposit', 'balance']) {
@@ -255,25 +256,25 @@ try {
       }
     }
 
-    if (await page.getByLabel('Name').inputValue()) {
+    if (await editor.getByLabel('Name').inputValue()) {
       throw new Error(`${kind}: customer details were not cleared after PDF generation`)
     }
-    if (await page.getByLabel('Amount 1').inputValue()) {
+    if (await editor.getByLabel('Amount 1').inputValue()) {
       throw new Error(`${kind}: work details were not cleared after PDF generation`)
     }
-    if ((await page.getByLabel('Date').inputValue()) !== expectedToday) {
+    if ((await editor.getByLabel('Date').inputValue()) !== expectedToday) {
       throw new Error(`${kind}: reset document did not retain today's automatic date`)
     }
 
     await page.getByRole('button', { name: 'Add item' }).click()
-    await page.getByLabel('Amount 1').fill(kind === 'quotation' ? '$60\n\n$40' : '$100')
+    await editor.getByLabel('Amount 1').fill(kind === 'quotation' ? '$60\n\n$40' : '$100')
     await page.getByRole('button', { name: 'Remove item 2' }).click()
-    if (await page.getByLabel('Description 2').count()) {
+    if (await editor.getByLabel('Description 2').count()) {
       throw new Error(`${kind}: removed line item remained in the editor`)
     }
     if (kind === 'invoice' || kind === 'quotation') {
-      const recalculatedTotal = await page.getByLabel('Total before GST').inputValue()
-      const recalculatedDeposit = await page.getByLabel('Deposit (10%)').inputValue()
+      const recalculatedTotal = await editor.getByLabel('Total before GST').inputValue()
+      const recalculatedDeposit = await editor.getByLabel('Deposit (10%)').inputValue()
       const recalculatedGst = await page.locator('.calculated-field').filter({ hasText: 'GST' }).locator('strong').textContent()
       const recalculatedBalance = await page.locator('.balance-field strong').textContent()
       if (recalculatedTotal !== '$100.00' || recalculatedDeposit !== '$10.00') {
@@ -314,12 +315,87 @@ try {
     }
     await mobilePage.getByRole('button', { name: 'Document', exact: true }).click()
 
-    await mobilePage.locator('.document-page [data-pdf-field="customer-name"]').fill('Mobile Client')
-    await mobilePage.locator('.document-page [data-pdf-field="item-1-description"]').fill('Mobile layout test')
-    await mobilePage.locator('.document-page [data-pdf-field="item-1-amount"]').fill('$500')
+    await mobilePage.locator('.document-page [data-pdf-field="date"]').click()
+    await mobilePage.keyboard.press('Escape')
+    if (await mobilePage.getByRole('dialog').count()) {
+      throw new Error(`mobile ${kind}: Escape did not close the field editor`)
+    }
+
+    let checkedEditorPosition = false
+    const editMobileField = async (fieldName, value, expectedInputMode = 'text') => {
+      await mobilePage.locator(`.document-page [data-pdf-field="${fieldName}"]`).click()
+      const dialog = mobilePage.getByRole('dialog')
+      const editorControl = dialog.locator('input, textarea')
+      if ((await editorControl.getAttribute('inputmode')) !== expectedInputMode) {
+        throw new Error(`mobile ${kind}: ${fieldName} opened the wrong mobile keyboard`)
+      }
+      if (!checkedEditorPosition) {
+        const sheetPosition = await dialog.locator('.field-editor-sheet').evaluate((sheet) => ({
+          top: sheet.getBoundingClientRect().top,
+          viewportHeight: window.innerHeight,
+        }))
+        if (sheetPosition.top > sheetPosition.viewportHeight / 3) {
+          throw new Error(`mobile ${kind}: field editor opens too low and may be covered by the iOS keyboard`)
+        }
+        await mobilePage.screenshot({
+          path: path.join(outputDirectory, `${kind}-mobile-field-editor.png`),
+          fullPage: true,
+        })
+        checkedEditorPosition = true
+      }
+      await editorControl.fill(value)
+      await dialog.getByRole('button', { name: 'Done', exact: true }).click()
+    }
+
+    const lockedLayoutBefore = await mobilePage.locator('.document-page').evaluate((pageElement) => {
+      const customer = pageElement.querySelector('.customer-box')?.getBoundingClientRect()
+      const bank = pageElement.querySelector('.bank-box')?.getBoundingClientRect()
+      return {
+        pageWidth: pageElement.getBoundingClientRect().width,
+        customerWidth: customer?.width ?? 0,
+        bankWidth: bank?.width ?? 0,
+      }
+    })
+
+    await editMobileField('customer-name', 'Mobile Client')
+    await editMobileField('customer-address', `${'x'.repeat(120)}\nFixed layout address`)
+    await editMobileField('item-1-description', `${'LongUnbrokenDescription'.repeat(12)}\nMobile layout test`)
+    await editMobileField('item-1-amount', 'k'.repeat(100), kind === 'invoice' ? 'decimal' : 'text')
+
+    const lockedLayoutAfter = await mobilePage.locator('.document-page').evaluate((pageElement) => {
+      const customer = pageElement.querySelector('.customer-box')?.getBoundingClientRect()
+      const bank = pageElement.querySelector('.bank-box')?.getBoundingClientRect()
+      const amount = pageElement.querySelector('[data-pdf-field="item-1-amount"]')?.getBoundingClientRect()
+      const amountCell = pageElement.querySelector('[data-pdf-field="item-1-amount"]')?.parentElement?.getBoundingClientRect()
+      return {
+        pageWidth: pageElement.getBoundingClientRect().width,
+        customerWidth: customer?.width ?? 0,
+        bankWidth: bank?.width ?? 0,
+        amountRight: amount?.right ?? 0,
+        amountCellRight: amountCell?.right ?? 0,
+      }
+    })
+    for (const dimension of ['pageWidth', 'customerWidth', 'bankWidth']) {
+      if (Math.abs(lockedLayoutAfter[dimension] - lockedLayoutBefore[dimension]) > 1) {
+        throw new Error(`mobile ${kind}: long text changed the locked ${dimension}`)
+      }
+    }
+    if (lockedLayoutAfter.amountRight > lockedLayoutAfter.amountCellRight + 1) {
+      throw new Error(`mobile ${kind}: long price escaped its locked box`)
+    }
+
+    await editMobileField('item-1-amount', '$500', kind === 'invoice' ? 'decimal' : 'text')
     await mobilePage.locator('.mobile-add-item').click()
-    await mobilePage.locator('.document-page [data-pdf-field="item-2-description"]').fill('Second mobile item')
-    await mobilePage.locator('.document-page [data-pdf-field="item-2-amount"]').fill('$250')
+    if (!await mobilePage.locator('.document-page [data-pdf-field="item-2-description"]').count()) {
+      throw new Error(`mobile ${kind}: Add item did not create a second document row`)
+    }
+    await mobilePage.locator('.mobile-remove-item').click()
+    if (await mobilePage.locator('.document-page [data-pdf-field="item-2-description"]').count()) {
+      throw new Error(`mobile ${kind}: Remove last did not recover from an accidental item`)
+    }
+    await mobilePage.locator('.mobile-add-item').click()
+    await editMobileField('item-2-description', 'Second mobile item')
+    await editMobileField('item-2-amount', '$250', kind === 'invoice' ? 'decimal' : 'text')
 
     const mobileTotal = await mobilePage.locator('.document-page [data-pdf-field="total"]').textContent()
     const mobileBalance = await mobilePage.locator('.document-page [data-pdf-field="balance"]').textContent()

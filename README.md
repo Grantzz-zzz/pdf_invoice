@@ -21,6 +21,8 @@ A template-matched document editor for Superior Plus Painting & Remodeling.
 - [x] Successful PDF generation clears editable details for the next document
 - [x] Mobile direct-document editing with a one-tap form fallback
 - [x] Add line items directly from the mobile document view
+- [x] Locked template geometry with a keyboard-safe mobile tap-to-edit sheet
+- [x] Mobile-friendly keyboards and direct recovery from accidentally added items
 - [x] Supplied company logo
 - [ ] Add exact contract body after its reference image is supplied
 - [ ] Final pixel-level comparison against original source files
